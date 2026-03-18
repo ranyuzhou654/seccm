@@ -92,6 +92,8 @@ class LorenzNetwork:
                 noise = rng.normal(0, dyn_noise_std, size=N)
                 state[0:N] += deriv[0:N] * self.dt + noise * sqrt_dt
                 state[N:] += deriv[N:] * self.dt
+                if not np.all(np.isfinite(state)):
+                    raise RuntimeError(f"Lorenz SDE diverged at step {t}.")
             data = data_all[transient:, 0:N]
         else:
             t_span = (0, total * self.dt)
@@ -112,6 +114,9 @@ class LorenzNetwork:
                 raise RuntimeError(f"ODE integration failed: {sol.message}")
 
             data = sol.y[0:N, transient:].T  # shape (T, N)
+
+        if not np.all(np.isfinite(data)):
+            raise RuntimeError("Lorenz produced non-finite values.")
 
         if noise_std > 0:
             data = data + rng.normal(0, noise_std, size=data.shape)

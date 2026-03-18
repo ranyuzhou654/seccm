@@ -79,6 +79,8 @@ class KuramotoNetwork:
                 d = self._deriv(t * self.dt, theta, omega)
                 noise = rng.normal(0, dyn_noise_std, size=N)
                 theta += d * self.dt + noise * sqrt_dt
+                if not np.all(np.isfinite(theta)):
+                    raise RuntimeError(f"Kuramoto SDE diverged at step {t}.")
             theta_all = theta_all[:, transient:]
         else:
             t_span = (0, total * self.dt)
@@ -100,6 +102,9 @@ class KuramotoNetwork:
             data = theta_all.T
         else:
             data = np.sin(theta_all).T
+
+        if not np.all(np.isfinite(data)):
+            raise RuntimeError("Kuramoto produced non-finite values.")
 
         if noise_std > 0:
             data = data + rng.normal(0, noise_std, size=data.shape)

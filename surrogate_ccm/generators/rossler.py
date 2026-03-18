@@ -87,6 +87,8 @@ class RosslerNetwork:
                 noise = rng.normal(0, dyn_noise_std, size=N)
                 state[0:N] += d[0:N] * self.dt + noise * sqrt_dt
                 state[N:] += d[N:] * self.dt
+                if not np.all(np.isfinite(state)):
+                    raise RuntimeError(f"Rössler SDE diverged at step {t}.")
             data = data_all[transient:, 0:N]
         else:
             t_span = (0, total * self.dt)
@@ -103,6 +105,9 @@ class RosslerNetwork:
                 raise RuntimeError(f"Rössler ODE integration failed: {sol.message}")
 
             data = sol.y[0:N, transient:].T
+
+        if not np.all(np.isfinite(data)):
+            raise RuntimeError("Rössler produced non-finite values.")
 
         if noise_std > 0:
             data = data + rng.normal(0, noise_std, size=data.shape)
