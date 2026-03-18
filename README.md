@@ -24,7 +24,7 @@ CCM detects causal relationships by exploiting **Takens' embedding theorem**: if
 ## Features
 
 - **7 coupled dynamical systems** — Logistic, Lorenz, Henon, Rossler, Hindmarsh-Rose, FitzHugh-Nagumo, Kuramoto
-- **5 surrogate methods** — FFT, AAFT, iAAFT, time-shift, random reorder
+- **7 surrogate methods** — FFT, AAFT, iAAFT, time-shift, random reorder, cycle-shuffle, twin
 - **Automatic embedding** — data-driven selection of embedding dimension (E) and delay (tau) via mutual information and simplex prediction
 - **Network-scale testing** — pairwise CCM with Benjamini-Hochberg FDR correction
 - **6 experiment modules** — bivariate validation, coupling strength sweep, noise robustness, topology comparison, surrogate method comparison, robustness ablation study
@@ -101,7 +101,9 @@ surrogate-ccm/
 │   │   ├── aaft_surrogate.py       #   amplitude-adjusted FT
 │   │   ├── iaaft_surrogate.py      #   iterative AAFT
 │   │   ├── timeshift_surrogate.py  #   circular time shift
-│   │   └── random_reorder.py       #   random permutation
+│   │   ├── random_reorder.py       #   random permutation
+│   │   ├── cycle_shuffle_surrogate.py  #   cycle-shuffle for oscillatory systems
+│   │   └── twin_surrogate.py       #   twin surrogate (recurrence-based)
 │   ├── testing/                    # Statistical testing
 │   │   ├── hypothesis_test.py      #   p-value, z-score, FDR correction
 │   │   └── se_ccm.py              #   SECCM class (full pipeline)
@@ -136,7 +138,7 @@ surrogate-ccm/
 | `coupling` | `--experiment coupling` | Sweep coupling strength across systems and topologies |
 | `noise` | `--experiment noise` | Effect of observation noise on detection accuracy |
 | `topology` | `--experiment topology` | Compare ER, WS, ring topologies at varying network sizes |
-| `surrogate` | `--experiment surrogate` | Compare 5 surrogate methods across 7 systems |
+| `surrogate` | `--experiment surrogate` | Compare 7 surrogate methods across 7 systems |
 | `robustness` | `--experiment robustness` | Ablation: sweep T, coupling, obs-noise, dyn-noise |
 
 ### Robustness Experiment Details
@@ -176,13 +178,39 @@ All systems support:
 
 ## Surrogate Methods
 
-| Method | Preserves | Destroys | Speed |
-|---|---|---|---|
-| FFT | Power spectrum | Amplitude distribution, nonlinearity | Fast |
-| AAFT | Amplitude distribution + approx. spectrum | Nonlinear structure | Fast |
-| iAAFT | Amplitude distribution + exact spectrum | Nonlinear structure | Slow (~50x) |
-| Time-shift | All local structure | Cross-series temporal alignment | Very fast |
-| Random reorder | Amplitude distribution | All temporal structure | Very fast |
+| Method | Preserves | Destroys | Best for | Speed |
+|---|---|---|---|---|
+| FFT | Power spectrum | Amplitude distribution, nonlinearity | Broadband chaotic | Fast |
+| AAFT | Amplitude dist. + approx. spectrum | Nonlinear structure | General purpose | Fast |
+| iAAFT | Amplitude dist. + exact spectrum | Nonlinear structure | General purpose | Moderate |
+| Time-shift | All local structure | Cross-series temporal alignment | Quick baseline | Very fast |
+| Random reorder | Amplitude distribution | All temporal structure | Independence test | Very fast |
+| **Cycle-shuffle** | Intra-cycle waveform, amplitude dist. | Inter-cycle phase coupling | **Narrowband oscillatory** (Rossler, FHN, Kuramoto) | Very fast |
+| **Twin** | Attractor topology (recurrence structure) | Inter-system phase coupling | **Any dynamical system** (theoretically optimal) | Moderate |
+
+### Cycle-Shuffle Surrogate
+
+Designed for **narrowband oscillatory systems** where FFT/AAFT/iAAFT preserve the periodic structure that carries causal information, leading to suppressed z-scores and negative ΔAUROC.
+
+**Algorithm:** Detect oscillation cycles via mean-crossing (rising edges) → split signal into complete cycles → randomly permute cycle order → reassemble. Falls back to time-shift if fewer than 3 cycles are detected.
+
+**Reference motivation:** T-sweep experiments show Rossler (top-3 spectral concentration = 0.822), FHN (0.901), and Kuramoto (0.846) have negative ΔAUROC with spectral surrogates, because the surrogate preserves the causal signal embedded in the periodic structure.
+
+### Twin Surrogate
+
+Generates surrogates that preserve the **recurrence structure** (attractor topology) of the original time series — the theoretically most principled surrogate method for testing synchronization and causal coupling.
+
+**Algorithm** ([Thiel et al., 2006, *EPL* 75(4)](https://doi.org/10.1209/epl/i2006-10147-0)):
+1. Reconstruct phase space via time-delay embedding
+2. Build recurrence neighborhood using KDTree (Chebyshev metric)
+3. Identify "twin" states — points with identical recurrence neighborhoods (hash-accelerated)
+4. Construct surrogate trajectory by walking the attractor, randomly switching between twin successors
+
+**Performance optimizations:**
+- KDTree + sparse neighbor sets instead of dense N×N recurrence matrix (6× faster, 3× less memory)
+- Row-hash grouping for twin detection (56× faster than brute-force row comparison)
+- Pre-computed twin structure cached across multiple surrogate generations
+- Cause-variable caching in SECCM pipeline (9× fewer surrogate generation calls)
 
 ## Conventions
 
@@ -202,12 +230,12 @@ time_series:
   transient: 1000
 
 surrogate:
-  methods: [fft, aaft, iaaft, timeshift, random_reorder]
+  methods: [fft, aaft, iaaft, timeshift, random_reorder, cycle_shuffle, twin]
   n_surrogates: 100
 
 surrogate_robustness:
   systems: [logistic, lorenz, henon, rossler, hindmarsh_rose, fitzhugh_nagumo, kuramoto]
-  methods: [fft, aaft, timeshift]
+  methods: [fft, aaft, iaaft, timeshift, cycle_shuffle]
   n_surrogates: 99
   N: 10
   n_reps: 10
@@ -235,7 +263,9 @@ ccm_matrix, params = compute_pairwise_ccm(data)        # all N^2 pairs
 # ── Surrogates ──────────────────────────────────────────
 from surrogate_ccm.surrogate import generate_surrogate
 
-surrogates = generate_surrogate(data[:, 0], method="aaft", n_surrogates=99)  # -> (99, T)
+surrogates = generate_surrogate(data[:, 0], method="aaft", n_surrogates=99)         # -> (99, T)
+surrogates = generate_surrogate(data[:, 0], method="cycle_shuffle", n_surrogates=99) # oscillatory
+surrogates = generate_surrogate(data[:, 0], method="twin", n_surrogates=99)          # recurrence-based
 
 # ── Full Pipeline ───────────────────────────────────────
 from surrogate_ccm.testing import SECCM
