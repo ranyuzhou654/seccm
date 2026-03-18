@@ -7,6 +7,7 @@ from .fft_surrogate import fft_surrogate
 from .iaaft_surrogate import iaaft_surrogate
 from .random_reorder import random_reorder_surrogate
 from .timeshift_surrogate import timeshift_surrogate
+from .cycle_shuffle_surrogate import cycle_shuffle_surrogate
 
 SURROGATE_METHODS = {
     "fft": fft_surrogate,
@@ -14,6 +15,7 @@ SURROGATE_METHODS = {
     "iaaft": iaaft_surrogate,
     "timeshift": timeshift_surrogate,
     "random_reorder": random_reorder_surrogate,
+    "cycle_shuffle": cycle_shuffle_surrogate,
 }
 
 
