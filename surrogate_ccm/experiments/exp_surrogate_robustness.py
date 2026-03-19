@@ -48,6 +48,12 @@ METHOD_DISPLAY = {
     "timeshift": "Time-shift",
     "iaaft": "iAAFT",
     "random_reorder": "Random reorder",
+    "cycle_shuffle": "Cycle shuffle",
+    "twin": "Twin",
+    "phase": "Phase",
+    "small_shuffle": "Small shuffle",
+    "truncated_fourier": "Trunc. Fourier",
+    "auto": "Adaptive",
 }
 
 SWEEP_LABEL = {
@@ -71,7 +77,13 @@ METHOD_COLORS = {
     "aaft": "#D55E00",      # vermillion
     "timeshift": "#009E73",  # bluish green
     "iaaft": "#CC79A7",     # reddish purple
-    "random_reorder": "#F0E442",
+    "random_reorder": "#F0E442",  # yellow
+    "cycle_shuffle": "#56B4E9",   # sky blue
+    "twin": "#E69F00",            # orange
+    "phase": "#000000",           # black
+    "small_shuffle": "#8C564B",   # brown
+    "truncated_fourier": "#17BECF",  # cyan
+    "auto": "#7F7F7F",           # grey
 }
 BASELINE_COLOR = "#555555"
 
@@ -81,6 +93,12 @@ METHOD_MARKERS = {
     "timeshift": "^",
     "iaaft": "D",
     "random_reorder": "v",
+    "cycle_shuffle": "P",
+    "twin": "X",
+    "phase": "*",
+    "small_shuffle": "h",
+    "truncated_fourier": "p",
+    "auto": "d",
 }
 
 
@@ -123,7 +141,8 @@ def _pub_rcparams():
 def _run_single_rep(args):
     """Run one repetition for a given parameter configuration."""
     (system_name, topology, N, eps, method, n_surr,
-     T, transient, noise_std, dyn_noise_std, seed, net_kwargs, fdr) = args
+     T, transient, noise_std, dyn_noise_std, seed, net_kwargs, fdr,
+     extra_seccm_kwargs) = args
 
     try:
         adj = generate_network(topology, N, seed=seed, **net_kwargs)
@@ -141,6 +160,7 @@ def _run_single_rep(args):
             fdr=fdr,
             seed=seed,
             verbose=False,
+            **extra_seccm_kwargs,
         )
         seccm.fit(data)
         return seccm.score(adj)
@@ -182,6 +202,7 @@ def _run_sweep(sweep_name, sweep_param, sweep_values_map, systems, methods,
     n_reps = fixed_params["n_reps"]
     fdr = fixed_params["fdr"]
     seed_base = fixed_params["seed_base"]
+    extra_seccm_kwargs = fixed_params.get("extra_seccm_kwargs", {})
 
     net_kwargs = {"p": er_p}
 
@@ -228,7 +249,7 @@ def _run_sweep(sweep_name, sweep_param, sweep_values_map, systems, methods,
             args_list = [
                 (sys_name, topology, N, eps, method, n_surr,
                  run_T, transient, run_noise, run_dyn_noise,
-                 next_seed + i, net_kwargs, fdr)
+                 next_seed + i, net_kwargs, fdr, extra_seccm_kwargs)
                 for i in range(batch_size)
             ]
             next_seed += batch_size
@@ -917,12 +938,21 @@ def run_surrogate_robustness_experiment(config, output_dir, n_jobs=-1):
     default_T = ts_cfg.get("T", 3000)
     default_transient = ts_cfg.get("transient", 1000)
 
+    # Extra SECCM kwargs from config (theiler_w, adaptive_rho, E_method, etc.)
+    seccm_cfg = cfg.get("seccm_kwargs", {})
+    extra_seccm_kwargs = {}
+    for key in ("theiler_w", "adaptive_rho", "E_method",
+                "convergence_filter", "convergence_threshold"):
+        if key in seccm_cfg:
+            extra_seccm_kwargs[key] = seccm_cfg[key]
+
     # Common fixed params (overridden per sub-experiment as needed)
     base_fixed = dict(
         N=N, topology=topology, coupling=coupling_map,
         n_surr=n_surr, T=default_T, transient=default_transient,
         noise_std=0.0, dyn_noise_std=0.0,
         er_p=er_p, n_reps=n_reps, fdr=fdr, seed_base=seed_base,
+        extra_seccm_kwargs=extra_seccm_kwargs,
     )
 
     all_dfs = {}

@@ -22,7 +22,7 @@ class HindmarshRoseNetwork:
     """
 
     def __init__(self, adj, coupling, a=1.0, b=3.0, c=1.0, d=5.0,
-                 r=0.006, s=4.0, x_R=-1.6, I_ext=3.25, dt=0.05):
+                 r=0.01, s=4.0, x_R=-1.6, I_ext=3.5, dt=0.05):
         self.adj = np.asarray(adj, dtype=float)
         self.coupling = coupling
         self.a = a

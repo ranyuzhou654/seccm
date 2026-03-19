@@ -1,6 +1,9 @@
-# Smoke test config for surrogate robustness experiment
-# Tests all 10 methods + auto across 2 systems with minimal reps
-# 2 systems × 11 methods × 2 sweep values × 2 reps ≈ 5-10 min
+# ============================================================
+# 冒烟测试：验证管线可用性（~2-5 分钟）
+# ============================================================
+# 用途：代码修改后快速验证管线不报错
+# 运行：python run_experiments.py --experiment robustness --config configs/smoke_test.yaml
+# ============================================================
 
 seed: 42
 
@@ -10,17 +13,13 @@ time_series:
 
 surrogate_robustness:
   systems: [logistic, lorenz]
-  methods: [fft, aaft, iaaft, timeshift, random_reorder, cycle_shuffle, twin, phase, small_shuffle, truncated_fourier, auto]
+  methods: [fft, iaaft, auto]
   n_surrogates: 19
   N: 5
   topology: ER
   er_p: 0.3
   n_reps: 2
   fdr: false
-
-  seccm_kwargs:
-    theiler_w: 0
-    adaptive_rho: false
 
   T_sweep:
     values: [300, 500]
@@ -40,5 +39,5 @@ surrogate_robustness:
     logistic: 0.1
     lorenz: 1.0
 
-n_jobs: 1
+n_jobs: 4
 output_dir: results/smoke_test

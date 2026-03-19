@@ -1,0 +1,42 @@
+# ============================================================
+# 替代方法对比：聚焦比较各 surrogate 方法的适用系统（~30-60 分钟）
+# ============================================================
+# 用途：生成「方法 × 系统」热力图，找出每个系统的最佳 surrogate
+# 运行：python run_experiments.py --experiment surrogate --config configs/method_comparison.yaml
+# ============================================================
+
+seed: 42
+
+time_series:
+  T: 3000
+  transient: 1000
+
+surrogate_comparison:
+  systems: [logistic, lorenz, henon, rossler, hindmarsh_rose, fitzhugh_nagumo, kuramoto]
+  methods:
+    - fft
+    - aaft
+    - iaaft
+    - timeshift
+    - random_reorder
+    - cycle_shuffle
+    - twin
+    - phase
+    - small_shuffle
+    - truncated_fourier
+  n_surrogates_values: [49, 99, 199]
+  N: 10
+  topology: ER
+  coupling:
+    logistic: 0.1
+    lorenz: 1.0
+    henon: 0.05
+    rossler: 0.2
+    hindmarsh_rose: 0.05
+    fitzhugh_nagumo: 0.05
+    kuramoto: 0.1
+  n_reps: 10
+  er_p: 0.3
+
+n_jobs: 8
+output_dir: results/method_comparison

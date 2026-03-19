@@ -1,0 +1,63 @@
+# ============================================================
+# 自适应特性消融：对比 adaptive_rho / theiler_w 开关的效果（~30-60 分钟）
+# ============================================================
+# 用途：量化 adaptive_rho 和 theiler_w 各自对 FPR/AUROC 的贡献
+# 运行方式：依次运行 4 种配置组合，对比结果
+#
+# 1) 全开（默认）:
+#    python run_experiments.py --experiment robustness --config configs/adaptive_ablation.yaml
+#
+# 2) 关闭 adaptive_rho：修改下面 seccm_kwargs 为 adaptive_rho: false
+# 3) 关闭 theiler_w：修改为 theiler_w: 0
+# 4) 全关：adaptive_rho: false + theiler_w: 0
+# ============================================================
+
+seed: 42
+
+time_series:
+  T: 3000
+  transient: 1000
+
+surrogate_robustness:
+  systems: [logistic, lorenz, henon, rossler, hindmarsh_rose, kuramoto]
+  methods: [iaaft, auto]
+  n_surrogates: 99
+  N: 10
+  topology: ER
+  er_p: 0.3
+  n_reps: 5
+  fdr: false
+
+  # ── 消融开关：修改这里来对比不同组合 ──
+  seccm_kwargs:
+    adaptive_rho: true   # false = 关闭自适应 min_rho
+    theiler_w: auto      # 0 = 关闭 Theiler 窗口
+
+  T_sweep:
+    values: [1000, 2000, 3000, 5000]
+    transient: 1000
+
+  coupling_sweep:
+    logistic:  [0.02, 0.05, 0.1, 0.2]
+    lorenz:    [0.5, 1.0, 2.0, 5.0]
+    henon:     [0.02, 0.05, 0.07, 0.1]
+    rossler:   [0.1, 0.2, 0.5, 1.0]
+    hindmarsh_rose: [0.02, 0.05, 0.1, 0.2]
+    kuramoto:  [0.05, 0.1, 0.2, 0.5]
+
+  obs_noise_sweep:
+    values: [0.0, 0.05, 0.1]
+
+  dyn_noise_sweep:
+    values: [0.0, 0.005, 0.01]
+
+  coupling:
+    logistic: 0.1
+    lorenz: 1.0
+    henon: 0.05
+    rossler: 0.2
+    hindmarsh_rose: 0.05
+    kuramoto: 0.1
+
+n_jobs: 8
+output_dir: results/adaptive_ablation

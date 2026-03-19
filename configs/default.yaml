@@ -37,6 +37,11 @@ surrogate:
     - iaaft
     - timeshift
     - random_reorder
+    - cycle_shuffle
+    - twin
+    - phase
+    - small_shuffle
+    - truncated_fourier
   n_surrogates: 100
   iaaft_max_iter: 200
 
@@ -126,8 +131,8 @@ network_topology:
 # Experiment: surrogate method comparison
 surrogate_comparison:
   systems: [logistic, lorenz, henon, rossler, hindmarsh_rose, fitzhugh_nagumo, kuramoto]
-  methods: [fft, aaft, iaaft, timeshift, random_reorder]
-  n_surrogates_values: [19, 49, 99, 199, 499]
+  methods: [fft, aaft, iaaft, timeshift, random_reorder, cycle_shuffle, twin, phase, small_shuffle, truncated_fourier]
+  n_surrogates_values: [19, 49, 99]  # [19, 49, 99, 199, 499]
   N: 10
   topology: ER
   coupling:
@@ -138,19 +143,25 @@ surrogate_comparison:
     hindmarsh_rose: 0.05
     fitzhugh_nagumo: 0.05
     kuramoto: 0.1
-  n_reps: 20
+  n_reps: 5
   er_p: 0.3
 
 # Experiment: surrogate robustness (4 sub-experiments)
 surrogate_robustness:
   systems: [logistic, lorenz, henon, rossler, hindmarsh_rose, fitzhugh_nagumo, kuramoto]
-  methods: [fft, aaft, timeshift]
+  methods: [fft, aaft, iaaft, timeshift, random_reorder, cycle_shuffle, twin, phase, small_shuffle, truncated_fourier, auto]
   n_surrogates: 99
   N: 10
   topology: ER
   er_p: 0.3
   n_reps: 10
   fdr: false
+
+  # Extra SECCM parameters (optional, omit to use defaults)
+  # seccm_kwargs:
+  #   theiler_w: auto    # "auto" = median tau (default), 0 = disabled, int = fixed
+  #   adaptive_rho: true # default is now true
+  #   E_method: simplex  # or fnn, cao
 
   # Sub-A: Time series length sweep
   T_sweep:

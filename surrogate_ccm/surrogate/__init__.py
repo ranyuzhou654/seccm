@@ -9,6 +9,14 @@ from .random_reorder import random_reorder_surrogate
 from .timeshift_surrogate import timeshift_surrogate
 from .cycle_shuffle_surrogate import cycle_shuffle_surrogate
 from .twin_surrogate import twin_surrogate, _precompute_twins
+from .phase_surrogate import phase_surrogate
+from .small_shuffle_surrogate import small_shuffle_surrogate
+from .truncated_fourier_surrogate import truncated_fourier_surrogate
+from .adaptive import select_surrogate_method, signal_profile
+from .multivariate_surrogate import (
+    multivariate_fft_surrogate,
+    multivariate_iaaft_surrogate,
+)
 
 SURROGATE_METHODS = {
     "fft": fft_surrogate,
@@ -18,6 +26,9 @@ SURROGATE_METHODS = {
     "random_reorder": random_reorder_surrogate,
     "cycle_shuffle": cycle_shuffle_surrogate,
     "twin": twin_surrogate,
+    "phase": phase_surrogate,
+    "small_shuffle": small_shuffle_surrogate,
+    "truncated_fourier": truncated_fourier_surrogate,
 }
 
 
@@ -81,4 +92,47 @@ def generate_surrogate(x, method="iaaft", n_surrogates=100, seed=None, **kwargs)
         for i in range(n_surrogates):
             surrogates[i] = func(x, rng=rng, **kwargs)
 
+    return surrogates
+
+
+MULTIVARIATE_METHODS = {
+    "multivariate_fft": multivariate_fft_surrogate,
+    "multivariate_iaaft": multivariate_iaaft_surrogate,
+}
+
+
+def generate_multivariate_surrogate(X, method="multivariate_fft",
+                                     n_surrogates=100, seed=None, **kwargs):
+    """Generate multivariate surrogates preserving cross-correlations.
+
+    Unlike univariate surrogates, these operate on the full (T, N) matrix
+    and preserve the linear cross-spectral structure between variables.
+
+    Parameters
+    ----------
+    X : ndarray, shape (T, N)
+        Multivariate time series.
+    method : str
+        'multivariate_fft' or 'multivariate_iaaft'.
+    n_surrogates : int
+        Number of surrogates to generate.
+    seed : int, optional
+        Base random seed.
+
+    Returns
+    -------
+    surrogates : list of ndarray, each shape (T, N)
+        List of multivariate surrogate datasets.
+    """
+    func = MULTIVARIATE_METHODS.get(method.lower())
+    if func is None:
+        raise ValueError(
+            f"Unknown multivariate surrogate method: {method}. "
+            f"Choose from {list(MULTIVARIATE_METHODS)}"
+        )
+
+    rng = np.random.default_rng(seed)
+    surrogates = []
+    for _ in range(n_surrogates):
+        surrogates.append(func(X, rng=rng, **kwargs))
     return surrogates

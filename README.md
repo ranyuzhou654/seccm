@@ -24,9 +24,11 @@ CCM detects causal relationships by exploiting **Takens' embedding theorem**: if
 ## Features
 
 - **7 coupled dynamical systems** — Logistic, Lorenz, Henon, Rossler, Hindmarsh-Rose, FitzHugh-Nagumo, Kuramoto
-- **7 surrogate methods** — FFT, AAFT, iAAFT, time-shift, random reorder, cycle-shuffle, twin
-- **Automatic embedding** — data-driven selection of embedding dimension (E) and delay (tau) via mutual information and simplex prediction
-- **Network-scale testing** — pairwise CCM with Benjamini-Hochberg FDR correction
+- **10 univariate + 2 multivariate surrogate methods + adaptive selection** — FFT, AAFT, iAAFT, time-shift, random reorder, cycle-shuffle, twin, phase, small-shuffle, truncated Fourier; multivariate FFT/iAAFT (cross-correlation preserving); `auto` mode selects per-variable based on spectral concentration
+- **Automatic embedding** — data-driven selection of embedding dimension (E) and delay (tau) via mutual information and simplex prediction, FNN, or Cao's method; non-uniform delay embedding for multi-timescale systems
+- **Convergence testing** — cross-validated ρ(L) convergence with Kendall-τ scoring
+- **Chaos pre-detection** — 0-1 test for chaos (Gottwald & Melbourne) with auto-subsampling for ODE flows
+- **Network-scale testing** — pairwise CCM with Benjamini-Hochberg FDR correction, Theiler window, adaptive effect-size thresholds
 - **6 experiment modules** — bivariate validation, coupling strength sweep, noise robustness, topology comparison, surrogate method comparison, robustness ablation study
 - **Publication-ready output** — 300 DPI figures (PDF + PNG), LaTeX tables, CSV data
 
@@ -93,8 +95,8 @@ surrogate-ccm/
 │   └── robustness_smoke.yaml       # Fast smoke test config
 ├── surrogate_ccm/
 │   ├── ccm/                        # CCM core algorithms
-│   │   ├── embedding.py            #   delay embedding, tau/E selection
-│   │   ├── ccm_core.py             #   cross-map prediction (ccm, ccm_convergence)
+│   │   ├── embedding.py            #   delay embedding, tau/E selection (simplex, FNN, Cao), non-uniform embedding
+│   │   ├── ccm_core.py             #   cross-map prediction, convergence test, Theiler window
 │   │   └── network_ccm.py          #   pairwise CCM for networks
 │   ├── surrogate/                  # Surrogate generation methods
 │   │   ├── fft_surrogate.py        #   FFT phase randomization
@@ -103,7 +105,12 @@ surrogate-ccm/
 │   │   ├── timeshift_surrogate.py  #   circular time shift
 │   │   ├── random_reorder.py       #   random permutation
 │   │   ├── cycle_shuffle_surrogate.py  #   cycle-shuffle for oscillatory systems
-│   │   └── twin_surrogate.py       #   twin surrogate (recurrence-based)
+│   │   ├── twin_surrogate.py       #   twin surrogate (recurrence-based)
+│   │   ├── phase_surrogate.py     #   phase surrogate (Hilbert-based)
+│   │   ├── small_shuffle_surrogate.py  #   small-shuffle surrogate
+│   │   ├── truncated_fourier_surrogate.py  #   band-selective phase randomization
+│   │   ├── adaptive.py            #   adaptive method selection by signal profile
+│   │   └── multivariate_surrogate.py  #   multivariate FFT/iAAFT (cross-corr preserving)
 │   ├── testing/                    # Statistical testing
 │   │   ├── hypothesis_test.py      #   p-value, z-score, FDR correction
 │   │   └── se_ccm.py              #   SECCM class (full pipeline)
@@ -125,7 +132,7 @@ surrogate-ccm/
 │   │   ├── exp_network_topology.py
 │   │   ├── exp_surrogate_comparison.py
 │   │   └── exp_surrogate_robustness.py
-│   └── utils/                      # I/O, parallel execution
+│   └── utils/                      # I/O, parallel execution, chaos detection
 ├── ccm.py                          # Advanced standalone CCM (latent CCM, convergence scoring)
 └── system.py                       # Advanced standalone simulator (RK4, process noise, BA/SF graphs)
 ```
@@ -167,7 +174,7 @@ The robustness experiment runs 4 sub-experiments, each sweeping one factor while
 | Henon | Discrete map | 2 | x | a = 1.1, b = 0.3 |
 | Lorenz | ODE (chaotic) | 3 | x | sigma = 10, rho = 28, beta = 8/3 |
 | Rossler | ODE (chaotic) | 3 | x | a = 0.2, b = 0.2, c = 5.7 |
-| Hindmarsh-Rose | ODE (neural) | 3 | x (membrane) | I_ext = 3.25, r = 0.006 |
+| Hindmarsh-Rose | ODE (neural) | 3 | x (membrane) | I_ext = 3.5, r = 0.01 |
 | FitzHugh-Nagumo | ODE (neural) | 2 | v (membrane) | I_ext = 0.5, tau = 12.5 |
 | Kuramoto | ODE (oscillator) | 1 | sin(theta) | omega ~ N(1.0, 0.2) |
 
@@ -185,8 +192,13 @@ All systems support:
 | iAAFT | Amplitude dist. + exact spectrum | Nonlinear structure | General purpose | Moderate |
 | Time-shift | All local structure | Cross-series temporal alignment | Quick baseline | Very fast |
 | Random reorder | Amplitude distribution | All temporal structure | Independence test | Very fast |
-| **Cycle-shuffle** | Intra-cycle waveform, amplitude dist. | Inter-cycle phase coupling | **Narrowband oscillatory** (Rossler, FHN, Kuramoto) | Very fast |
+| **Cycle-shuffle** | Intra-cycle waveform, amplitude dist. | Inter-cycle phase coupling | **Narrowband oscillatory** (Rossler) | Very fast |
 | **Twin** | Attractor topology (recurrence structure) | Inter-system phase coupling | **Any dynamical system** (theoretically optimal) | Moderate |
+| **Phase** | Amplitude envelope | Phase coupling | **Phase-coupled oscillatory** (Kuramoto, FHN) | Fast |
+| **Small-shuffle** | Large-scale trends | Fine temporal order | Trending data | Very fast |
+| **Truncated Fourier** | Structure outside target band | Phase within target band | Multi-timescale analysis | Fast |
+| **Multivariate FFT** | Cross-correlations + power spectra | Nonlinear cross-dependencies | Linearly coupled systems | Fast |
+| **Multivariate iAAFT** | Cross-corr + spectra + amplitude dist. | Nonlinear cross-dependencies | Linearly coupled systems | Moderate |
 
 ### Cycle-Shuffle Surrogate
 
@@ -211,6 +223,20 @@ Generates surrogates that preserve the **recurrence structure** (attractor topol
 - Row-hash grouping for twin detection (56× faster than brute-force row comparison)
 - Pre-computed twin structure cached across multiple surrogate generations
 - Cause-variable caching in SECCM pipeline (9× fewer surrogate generation calls)
+
+### Phase Surrogate
+
+Designed for **phase-coupled oscillatory systems** (Kuramoto, FHN) where cycle-shuffle fails because all cycles are nearly identical (sin(θ) waveform).
+
+**Algorithm:** Hilbert transform → extract instantaneous amplitude A(t) and phase φ(t) → shuffle phase increments Δφ → reconstruct as A(t)·cos(φ_shuffled(t)). Preserves the amplitude envelope while destroying inter-oscillator phase coupling.
+
+### Small-Shuffle Surrogate
+
+A middle ground between time-shift (too conservative) and random-reorder (too aggressive). Perturbs each time index by a small random amount (±δ), preserving large-scale trends while destroying fine temporal alignment.
+
+### Truncated Fourier Surrogate
+
+Band-selective phase randomization: only randomizes phases within a specified frequency band. Enables testing causality at specific timescales — randomize low frequencies to test slow causality, or high frequencies to test fast coupling.
 
 ## Conventions
 
@@ -255,30 +281,60 @@ data = system.generate(T=3000, transient=1000, seed=0,
 
 # ── CCM ─────────────────────────────────────────────────
 from surrogate_ccm.ccm import delay_embed, select_parameters, ccm, compute_pairwise_ccm
+from surrogate_ccm.ccm import convergence_score, select_E_fnn, select_E_cao
+from surrogate_ccm.ccm import delay_embed_nonuniform, select_delays_nonuniform
 
 E, tau = select_parameters(data[:, 0])                 # auto-select (E, tau)
+E, tau = select_parameters(data[:, 0], E_method="fnn") # FNN method
+E, tau = select_parameters(data[:, 0], E_method="cao") # Cao's method
 rho = ccm(data[:, 0], data[:, 1], E=3, tau=2)         # test "node 1 causes node 0"
-ccm_matrix, params = compute_pairwise_ccm(data)        # all N^2 pairs
+rho = ccm(data[:, 0], data[:, 1], E=3, tau=2, theiler_w=5)  # with Theiler window
+score, rho = convergence_score(data[:, 0], data[:, 1], E=3, tau=2,
+                               cross_validate=True)    # convergence test
+
+# Non-uniform embedding (for multi-timescale systems like Hindmarsh-Rose)
+delays = select_delays_nonuniform(data[:, 0], E_max=5, tau_max=100)  # e.g. [0, 5, 6, 17, 18]
+M = delay_embed_nonuniform(data[:, 0], delays)         # custom delay embedding
 
 # ── Surrogates ──────────────────────────────────────────
-from surrogate_ccm.surrogate import generate_surrogate
+from surrogate_ccm.surrogate import generate_surrogate, select_surrogate_method
+from surrogate_ccm.surrogate import generate_multivariate_surrogate
 
 surrogates = generate_surrogate(data[:, 0], method="aaft", n_surrogates=99)         # -> (99, T)
 surrogates = generate_surrogate(data[:, 0], method="cycle_shuffle", n_surrogates=99) # oscillatory
 surrogates = generate_surrogate(data[:, 0], method="twin", n_surrogates=99)          # recurrence-based
+method, profile = select_surrogate_method(data[:, 0])                               # auto-select method
+
+# Multivariate surrogates (preserves cross-correlations between variables)
+mv_surr = generate_multivariate_surrogate(data, method="multivariate_fft", n_surrogates=99)  # list of (T,N)
+
+# ── Chaos Detection ────────────────────────────────────
+from surrogate_ccm.utils import test_01_chaos, is_chaotic
+
+K, K_values = test_01_chaos(data[:, 0])                # K ≈ 1 → chaotic, K ≈ 0 → regular
+chaotic, K = is_chaotic(data[:, 0])                    # quick boolean check
 
 # ── Full Pipeline ───────────────────────────────────────
 from surrogate_ccm.testing import SECCM
 
-seccm = SECCM(surrogate_method="aaft", n_surrogates=99, alpha=0.05, fdr=True)
+seccm = SECCM(surrogate_method="auto", n_surrogates=99, alpha=0.05, fdr=True)
+# Defaults: theiler_w="auto" (median tau), adaptive_rho=True
 seccm.fit(data)
 metrics = seccm.score(adj)     # -> dict with AUROC, TPR, FPR, etc.
+
+# With convergence filtering (optional, more conservative)
+seccm = SECCM(convergence_filter=True, convergence_threshold=0.0)
+seccm.fit(data)
 
 # Access internals
 seccm.ccm_matrix_              # raw CCM rho matrix (N, N)
 seccm.pvalue_matrix_           # p-value matrix (N, N)
 seccm.zscore_matrix_           # z-score matrix (N, N)
 seccm.detected_                # binary detection matrix (N, N)
+seccm.surrogate_methods_used_  # per-variable method (auto mode)
+seccm.min_rho_matrix_          # per-pair adaptive thresholds
+seccm.theiler_w_used_          # resolved Theiler window value
+seccm.convergence_matrix_      # convergence scores (if convergence_filter=True)
 ```
 
 ## Citation

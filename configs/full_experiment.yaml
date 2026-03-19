@@ -1,0 +1,165 @@
+# ============================================================
+# 完整实验：全系统 × 全方法 × 密集扫描（~3-8 小时，视 n_jobs）
+# ============================================================
+# 用途：论文级别的完整实验数据收集
+# 运行：python run_experiments.py --experiment all --config configs/full_experiment.yaml --n-jobs 16
+# ============================================================
+
+seed: 42
+
+time_series:
+  T: 3000
+  transient: 1000
+
+# ── 系统参数 ──────────────────────────────────────────────
+logistic:
+  r: 3.9
+lorenz:
+  sigma: 10.0
+  rho: 28.0
+  beta: 2.6667
+  dt: 0.01
+henon:
+  a: 1.1
+  b: 0.3
+
+# ── CCM 参数 ─────────────────────────────────────────────
+ccm:
+  E_max: 10
+  tau_max: 50
+  k: null
+  n_library_sizes: 20
+
+# ── 替代数据 ─────────────────────────────────────────────
+surrogate:
+  methods:
+    - fft
+    - aaft
+    - iaaft
+    - timeshift
+    - random_reorder
+    - cycle_shuffle
+    - twin
+    - phase
+    - small_shuffle
+    - truncated_fourier
+  n_surrogates: 100
+  iaaft_max_iter: 200
+
+# ── 统计检验 ─────────────────────────────────────────────
+testing:
+  alpha: 0.05
+  fdr_method: bh
+
+# ── 实验 1：双变量验证 ───────────────────────────────────
+bivariate:
+  systems: [logistic, lorenz, henon, rossler, hindmarsh_rose, kuramoto]
+  coupling_strengths:
+    logistic: 0.1
+    lorenz: 1.0
+    henon: 0.05
+    rossler: 0.2
+    hindmarsh_rose: 0.05
+    kuramoto: 0.1
+  n_reps: 10
+
+# ── 实验 2：耦合强度扫描 ─────────────────────────────────
+coupling_strength:
+  systems: [logistic, lorenz, henon]
+  topologies: [ER, WS, ring]
+  N: 10
+  coupling_values:
+    logistic: [0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5]
+    lorenz:   [0.1, 0.5, 1.0, 2.0, 3.0, 5.0, 8.0]
+    henon:    [0.01, 0.02, 0.03, 0.05, 0.07, 0.1]
+  n_reps: 20
+  er_p: 0.3
+  ws_k: 4
+  ws_p: 0.3
+
+# ── 实验 3：噪声鲁棒性 ──────────────────────────────────
+noise:
+  systems: [logistic, lorenz, henon]
+  topologies: [ER]
+  N: 10
+  coupling:
+    logistic: 0.1
+    lorenz: 1.0
+    henon: 0.05
+  noise_levels: [0.0, 0.01, 0.05, 0.1, 0.2]
+  n_reps: 20
+  er_p: 0.3
+
+# ── 实验 4：网络拓扑 ────────────────────────────────────
+network_topology:
+  systems: [logistic]
+  topologies: [ER, WS, ring]
+  N_values: [10, 20, 30]
+  coupling:
+    logistic: 0.1
+    lorenz: 1.0
+    henon: 0.05
+  n_reps: 20
+  er_p: 0.3
+  ws_k: 4
+  ws_p: 0.3
+
+# ── 实验 5：替代方法比较 ─────────────────────────────────
+surrogate_comparison:
+  systems: [logistic, lorenz, henon, rossler, hindmarsh_rose, fitzhugh_nagumo, kuramoto]
+  methods: [fft, aaft, iaaft, timeshift, random_reorder, cycle_shuffle, twin, phase, small_shuffle, truncated_fourier]
+  n_surrogates_values: [19, 49, 99, 199]
+  N: 10
+  topology: ER
+  coupling:
+    logistic: 0.1
+    lorenz: 1.0
+    henon: 0.05
+    rossler: 0.2
+    hindmarsh_rose: 0.05
+    fitzhugh_nagumo: 0.05
+    kuramoto: 0.1
+  n_reps: 5
+  er_p: 0.3
+
+# ── 实验 6：鲁棒性消融（核心实验）────────────────────────
+surrogate_robustness:
+  systems: [logistic, lorenz, henon, rossler, hindmarsh_rose, fitzhugh_nagumo, kuramoto]
+  methods: [fft, aaft, iaaft, timeshift, random_reorder, cycle_shuffle, twin, phase, small_shuffle, truncated_fourier, auto]
+  n_surrogates: 99
+  N: 10
+  topology: ER
+  er_p: 0.3
+  n_reps: 10
+  fdr: false
+
+  T_sweep:
+    values: [500, 1000, 2000, 3000, 5000]
+    transient: 1000
+
+  coupling_sweep:
+    logistic:  [0.01, 0.02, 0.05, 0.1, 0.2, 0.3]
+    lorenz:    [0.1, 0.5, 1.0, 2.0, 5.0, 8.0]
+    henon:     [0.01, 0.02, 0.03, 0.05, 0.07, 0.1]
+    rossler:   [0.05, 0.1, 0.2, 0.5, 1.0, 2.0]
+    hindmarsh_rose: [0.01, 0.02, 0.05, 0.1, 0.2, 0.5]
+    fitzhugh_nagumo: [0.01, 0.02, 0.05, 0.1, 0.2, 0.5]
+    kuramoto:  [0.02, 0.05, 0.1, 0.2, 0.5, 1.0]
+
+  obs_noise_sweep:
+    values: [0.0, 0.01, 0.05, 0.1, 0.2]
+
+  dyn_noise_sweep:
+    values: [0.0, 0.001, 0.005, 0.01, 0.05]
+
+  coupling:
+    logistic: 0.1
+    lorenz: 1.0
+    henon: 0.05
+    rossler: 0.2
+    hindmarsh_rose: 0.05
+    fitzhugh_nagumo: 0.05
+    kuramoto: 0.1
+
+n_jobs: -1
+output_dir: results/full

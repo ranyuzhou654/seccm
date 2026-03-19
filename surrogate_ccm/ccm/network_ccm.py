@@ -6,7 +6,8 @@ from .ccm_core import ccm
 from .embedding import select_parameters
 
 
-def compute_pairwise_ccm(data, E=None, tau=None, params_per_node=None):
+def compute_pairwise_ccm(data, E=None, tau=None, params_per_node=None,
+                         theiler_w=0):
     """Compute pairwise CCM matrix for all node pairs.
 
     For each pair (i, j), computes ccm(x_i, x_j) which tests "j causes i".
@@ -23,6 +24,8 @@ def compute_pairwise_ccm(data, E=None, tau=None, params_per_node=None):
     params_per_node : list of (E, tau), optional
         Per-node embedding parameters. If None and E/tau are None,
         parameters are auto-selected.
+    theiler_w : int
+        Theiler window for neighbor exclusion.
 
     Returns
     -------
@@ -47,7 +50,7 @@ def compute_pairwise_ccm(data, E=None, tau=None, params_per_node=None):
         for j in range(N):
             if i == j:
                 continue
-            # ccm(x_i, x_j): cross-map from M_xi to predict x_j -> tests "j causes i"
-            ccm_matrix[i, j] = ccm(data[:, i], data[:, j], E_i, tau_i)
+            ccm_matrix[i, j] = ccm(data[:, i], data[:, j], E_i, tau_i,
+                                   theiler_w=theiler_w)
 
     return ccm_matrix, params

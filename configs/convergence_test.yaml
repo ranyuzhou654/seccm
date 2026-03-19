@@ -1,0 +1,59 @@
+# ============================================================
+# 收敛性过滤测试：验证 convergence_filter 对检测精度的影响（~20-40 分钟）
+# ============================================================
+# 用途：对比开启/关闭 convergence_filter 的 AUROC 差异
+# 运行：
+#   python run_experiments.py --experiment robustness --config configs/convergence_test.yaml
+# 然后修改 seccm_kwargs.convergence_filter 为 false 再跑一次对比
+# ============================================================
+
+seed: 42
+
+time_series:
+  T: 3000
+  transient: 1000
+
+surrogate_robustness:
+  systems: [logistic, lorenz, henon, rossler, hindmarsh_rose, kuramoto]
+  methods: [iaaft, auto]
+  n_surrogates: 99
+  N: 10
+  topology: ER
+  er_p: 0.3
+  n_reps: 5
+  fdr: false
+
+  seccm_kwargs:
+    adaptive_rho: true
+    theiler_w: auto
+    convergence_filter: true
+    convergence_threshold: 0.0
+
+  T_sweep:
+    values: [1000, 2000, 3000, 5000]
+    transient: 1000
+
+  coupling_sweep:
+    logistic:  [0.05, 0.1, 0.2]
+    lorenz:    [0.5, 1.0, 5.0]
+    henon:     [0.02, 0.05, 0.1]
+    rossler:   [0.1, 0.2, 1.0]
+    hindmarsh_rose: [0.02, 0.05, 0.2]
+    kuramoto:  [0.05, 0.1, 0.5]
+
+  obs_noise_sweep:
+    values: [0.0, 0.05, 0.1]
+
+  dyn_noise_sweep:
+    values: [0.0, 0.005, 0.01]
+
+  coupling:
+    logistic: 0.1
+    lorenz: 1.0
+    henon: 0.05
+    rossler: 0.2
+    hindmarsh_rose: 0.05
+    kuramoto: 0.1
+
+n_jobs: 8
+output_dir: results/convergence_test

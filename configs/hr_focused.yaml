@@ -1,0 +1,41 @@
+# ============================================================
+# HR 系统专项测试：验证新参数 (r=0.01, I_ext=3.5) 的检测能力（~10-20 分钟）
+# ============================================================
+# 用途：验证 Fix 3（HR 参数修复）在多种条件下的效果
+# 运行：python run_experiments.py --experiment robustness --config configs/hr_focused.yaml
+# ============================================================
+
+seed: 42
+
+time_series:
+  T: 3000
+  transient: 1000
+
+surrogate_robustness:
+  systems: [hindmarsh_rose]
+  methods: [iaaft, cycle_shuffle, phase, twin, auto]
+  n_surrogates: 99
+  N: 10
+  topology: ER
+  er_p: 0.3
+  n_reps: 5
+  fdr: false
+
+  T_sweep:
+    values: [500, 1000, 2000, 3000, 5000, 10000]
+    transient: 1000
+
+  coupling_sweep:
+    hindmarsh_rose: [0.01, 0.02, 0.05, 0.1, 0.2, 0.5]
+
+  obs_noise_sweep:
+    values: [0.0, 0.01, 0.05, 0.1, 0.2]
+
+  dyn_noise_sweep:
+    values: [0.0, 0.001, 0.005, 0.01, 0.05]
+
+  coupling:
+    hindmarsh_rose: 0.05
+
+n_jobs: 8
+output_dir: results/hr_focused

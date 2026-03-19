@@ -25,10 +25,13 @@ class RosslerNetwork:
         Integration / sampling time step.
     hetero_sigma : float
         Standard deviation for heterogeneous c parameter across nodes.
+    max_retries : int
+        Maximum number of retries with different initial conditions on
+        divergence.
     """
 
     def __init__(self, adj, coupling, a=0.2, b=0.2, c=5.7, dt=0.05,
-                 hetero_sigma=0.0):
+                 hetero_sigma=0.0, max_retries=5):
         self.adj = np.asarray(adj, dtype=float)
         self.coupling = coupling
         self.a = a
@@ -37,6 +40,7 @@ class RosslerNetwork:
         self.dt = dt
         self.hetero_sigma = hetero_sigma
         self.N = adj.shape[0]
+        self.max_retries = max_retries
 
     def _deriv(self, t, state, A, eps, c_vec):
         N = self.N
@@ -55,9 +59,26 @@ class RosslerNetwork:
 
         return np.concatenate([dX, dY, dZ])
 
+    def _init_state(self, rng):
+        """Generate initial conditions near the Rössler attractor.
+
+        The Rössler attractor lives roughly at:
+          x ∈ [-10, 12], y ∈ [-10, 5], z ∈ [0, c ≈ 5.7]
+        Initializing z in [0, c] instead of [-5, 5] greatly reduces
+        transient blow-up and divergence.
+        """
+        N = self.N
+        x0 = rng.uniform(-5.0, 5.0, size=N)
+        y0 = rng.uniform(-5.0, 5.0, size=N)
+        z0 = rng.uniform(0.0, self.c, size=N)  # z near attractor
+        return np.concatenate([x0, y0, z0])
+
     def generate(self, T, transient=1000, seed=None, noise_std=0.0,
                  dyn_noise_std=0.0):
         """Generate coupled Rössler time series.
+
+        Includes automatic retry with new initial conditions if divergence
+        is detected during integration.
 
         Parameters
         ----------
@@ -74,10 +95,38 @@ class RosslerNetwork:
         total = T + transient
 
         c_vec = self.c + rng.normal(0.0, self.hetero_sigma, size=N)
-        state0 = rng.uniform(-5.0, 5.0, size=3 * N)
+
+        last_error = None
+        for attempt in range(self.max_retries):
+            try:
+                data = self._integrate(total, transient, rng, c_vec,
+                                       dyn_noise_std)
+                if noise_std > 0:
+                    data = data + rng.normal(0, noise_std, size=data.shape)
+                return data
+            except RuntimeError as e:
+                last_error = e
+                # Retry with fresh initial conditions
+                continue
+
+        raise RuntimeError(
+            f"Rössler diverged after {self.max_retries} retries. "
+            f"Last error: {last_error}. "
+            f"Try reducing coupling={self.coupling}."
+        )
+
+    def _integrate(self, total, transient, rng, c_vec, dyn_noise_std):
+        """Run integration with divergence detection."""
+        N = self.N
+        state0 = self._init_state(rng)
+
+        # Divergence threshold: Rössler attractor stays within ~100 for
+        # typical parameters. Values > 1e4 indicate blow-up.
+        div_threshold = 1e4
 
         if dyn_noise_std > 0:
-            deriv_fn = lambda t, s: self._deriv(t, s, self.adj, self.coupling, c_vec)
+            deriv_fn = lambda t, s: self._deriv(t, s, self.adj,
+                                                self.coupling, c_vec)
             state = state0.copy()
             data_all = np.empty((total, 3 * N))
             sqrt_dt = np.sqrt(self.dt)
@@ -87,7 +136,7 @@ class RosslerNetwork:
                 noise = rng.normal(0, dyn_noise_std, size=N)
                 state[0:N] += d[0:N] * self.dt + noise * sqrt_dt
                 state[N:] += d[N:] * self.dt
-                if not np.all(np.isfinite(state)):
+                if not np.all(np.isfinite(state)) or np.max(np.abs(state)) > div_threshold:
                     raise RuntimeError(f"Rössler SDE diverged at step {t}.")
             data = data_all[transient:, 0:N]
         else:
@@ -95,21 +144,24 @@ class RosslerNetwork:
             t_eval = np.linspace(0, total * self.dt, total)
 
             sol = solve_ivp(
-                lambda t, s: self._deriv(t, s, self.adj, self.coupling, c_vec),
+                lambda t, s: self._deriv(t, s, self.adj, self.coupling,
+                                         c_vec),
                 t_span, state0,
                 method="RK45", t_eval=t_eval,
                 rtol=1e-8, atol=1e-10, max_step=self.dt,
             )
 
             if sol.status != 0:
-                raise RuntimeError(f"Rössler ODE integration failed: {sol.message}")
+                raise RuntimeError(
+                    f"Rössler ODE integration failed: {sol.message}")
+
+            full_data = sol.y[:3 * N, :]
+            if np.max(np.abs(full_data)) > div_threshold:
+                raise RuntimeError("Rössler ODE diverged (values > 1e4).")
 
             data = sol.y[0:N, transient:].T
 
         if not np.all(np.isfinite(data)):
             raise RuntimeError("Rössler produced non-finite values.")
-
-        if noise_std > 0:
-            data = data + rng.normal(0, noise_std, size=data.shape)
 
         return data
