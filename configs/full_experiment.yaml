@@ -161,5 +161,17 @@ surrogate_robustness:
     fitzhugh_nagumo: 0.05
     kuramoto: 0.1
 
+# ── 实验 7：三节点因果结构 ─────────────────────────────────
+trivariate:
+  systems: [logistic, lorenz, henon, rossler]
+  methods: [fft, iaaft, cycle_shuffle, twin, phase]
+  n_surrogates: 99
+  n_reps: 20
+  coupling:
+    logistic: 0.1
+    lorenz: 3.0
+    henon: 0.05
+    rossler: 0.2
+
 n_jobs: 20
 output_dir: results/full

@@ -13,6 +13,7 @@ from surrogate_ccm.experiments import (
     run_noise_experiment,
     run_surrogate_comparison_experiment,
     run_surrogate_robustness_experiment,
+    run_trivariate_experiment,
 )
 from surrogate_ccm.utils.io import load_config
 
@@ -24,6 +25,7 @@ EXPERIMENTS = {
     "topology": run_network_topology_experiment,
     "surrogate": run_surrogate_comparison_experiment,
     "robustness": run_surrogate_robustness_experiment,
+    "trivariate": run_trivariate_experiment,
 }
 
 
