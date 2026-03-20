@@ -27,18 +27,18 @@ def _run_single_rep(args):
     try:
         system = create_system(system_name, adj, eps)
         data = system.generate(T, transient=transient, seed=seed)
-    except RuntimeError:
-        return None
 
-    seccm = SECCM(
-        surrogate_method="iaaft",
-        n_surrogates=n_surrogates,
-        alpha=0.05,
-        seed=seed,
-        verbose=False,
-    )
-    seccm.fit(data)
-    return seccm.score(adj)
+        seccm = SECCM(
+            surrogate_method="iaaft",
+            n_surrogates=n_surrogates,
+            alpha=0.05,
+            seed=seed,
+            verbose=False,
+        )
+        seccm.fit(data)
+        return seccm.score(adj)
+    except Exception:
+        return None
 
 
 def run_network_topology_experiment(config, output_dir="results/topology", n_jobs=-1):

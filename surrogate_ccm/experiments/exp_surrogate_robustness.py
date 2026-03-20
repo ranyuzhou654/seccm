@@ -238,49 +238,35 @@ def _run_sweep(sweep_name, sweep_param, sweep_values_map, systems, methods,
         elif sweep_param == "dyn_noise_std":
             run_dyn_noise = sweep_val
 
-        valid = []
-        n_failed = 0
-        next_seed = seed_base
-        max_attempts = n_reps * 10  # safety cap to avoid infinite loops
-        total_attempts = 0
+        # Fixed seed list — no retry/resampling to avoid survivorship bias
+        args_list = [
+            (sys_name, topology, N, eps, method, n_surr,
+             run_T, transient, run_noise, run_dyn_noise,
+             seed_base + i, net_kwargs, fdr, extra_seccm_kwargs)
+            for i in range(n_reps)
+        ]
 
-        while len(valid) < n_reps and total_attempts < max_attempts:
-            batch_size = n_reps - len(valid)
-            args_list = [
-                (sys_name, topology, N, eps, method, n_surr,
-                 run_T, transient, run_noise, run_dyn_noise,
-                 next_seed + i, net_kwargs, fdr, extra_seccm_kwargs)
-                for i in range(batch_size)
-            ]
-            next_seed += batch_size
-            total_attempts += batch_size
+        results = parallel_map(
+            _run_single_rep, args_list,
+            n_jobs=n_jobs,
+            desc=f"  reps {sys_name}/{method}/{sweep_param}={sweep_val}",
+        )
 
-            results = parallel_map(
-                _run_single_rep, args_list,
-                n_jobs=n_jobs,
-                desc=f"  reps {sys_name}/{method}/{sweep_param}={sweep_val}",
-            )
+        valid = [r for r in results if r is not None]
+        n_failed = n_reps - len(valid)
 
-            for r in results:
-                if r is not None:
-                    valid.append(r)
-                else:
-                    n_failed += 1
-
-        if len(valid) < n_reps:
-            print(f"    WARNING: only {len(valid)}/{n_reps} valid reps "
-                  f"after {total_attempts} attempts for "
-                  f"{sys_name}/{method}/{sweep_param}={sweep_val}")
-        elif n_failed > 0:
-            print(f"    INFO: {n_failed} reps diverged (resampled) for "
+        if n_failed > 0:
+            print(f"    WARNING: {n_failed}/{n_reps} reps failed for "
                   f"{sys_name}/{method}/{sweep_param}={sweep_val}")
 
-        for r in valid[:n_reps]:
+        for r in valid:
             row = {
                 "system": sys_name,
                 "method": method,
                 sweep_param: sweep_val,
+                "n_total_reps": n_reps,
                 "n_failed_reps": n_failed,
+                "success_rate": len(valid) / n_reps,
             }
             for k in COLLECT_KEYS:
                 row[k] = r.get(k, np.nan)
