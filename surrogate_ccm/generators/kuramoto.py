@@ -83,8 +83,8 @@ class KuramotoNetwork:
                     raise RuntimeError(f"Kuramoto SDE diverged at step {t}.")
             theta_all = theta_all[:, transient:]
         else:
-            t_span = (0, total * self.dt)
-            t_eval = np.linspace(0, total * self.dt, total)
+            t_eval = np.arange(total) * self.dt
+            t_span = (0, t_eval[-1])
 
             sol = solve_ivp(
                 lambda t, s: self._deriv(t, s, omega),

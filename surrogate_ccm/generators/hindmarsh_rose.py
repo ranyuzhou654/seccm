@@ -94,8 +94,8 @@ class HindmarshRoseNetwork:
             transient_fine = transient * ss
             data = data_all[transient_fine::ss][:T]
         else:
-            t_span = (0, total_fine * self.dt)
-            t_eval = np.linspace(0, total_fine * self.dt, total_fine)
+            t_eval = np.arange(total_fine) * self.dt
+            t_span = (0, t_eval[-1])
 
             sol = solve_ivp(
                 self._deriv, t_span, state0,

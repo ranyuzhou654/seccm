@@ -140,8 +140,8 @@ class RosslerNetwork:
                     raise RuntimeError(f"Rössler SDE diverged at step {t}.")
             data = data_all[transient:, 0:N]
         else:
-            t_span = (0, total * self.dt)
-            t_eval = np.linspace(0, total * self.dt, total)
+            t_eval = np.arange(total) * self.dt
+            t_span = (0, t_eval[-1])
 
             sol = solve_ivp(
                 lambda t, s: self._deriv(t, s, self.adj, self.coupling,
