@@ -97,6 +97,18 @@ class SECCM:
         self.convergence_filter = convergence_filter
         self.convergence_threshold = convergence_threshold
 
+        # Warn if n_surrogates is too low for the chosen alpha
+        import math
+        min_n = math.ceil(1 / alpha) - 1
+        if n_surrogates < min_n:
+            import warnings
+            warnings.warn(
+                f"n_surrogates={n_surrogates} is too low for alpha={alpha}: "
+                f"minimum p-value achievable is {1/(n_surrogates+1):.4f}. "
+                f"Need at least n_surrogates>={min_n} for rejection to be possible.",
+                stacklevel=2,
+            )
+
         # Results
         self.ccm_matrix_ = None
         self.pvalue_matrix_ = None
@@ -249,7 +261,7 @@ class SECCM:
         if self.fdr:
             rejected, _ = fdr_correction(pvals_off, alpha=self.alpha)
         else:
-            rejected = pvals_off < self.alpha
+            rejected = pvals_off <= self.alpha
 
         # Apply effect-size threshold
         rho_off = ccm_matrix[mask]
