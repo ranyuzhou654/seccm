@@ -165,7 +165,7 @@ def draw_pipeline(palette, save_prefix="docs/pipeline"):
     detail_contents = [
         [  # Stage 1
             "Topology: ER / WS / Ring",
-            "7 dynamical systems",
+            "8 dynamical systems",
             "Coupling \u03b5, noise \u03c3_obs, \u03c3_dyn",
             "\u2192 data (T, N) + adj (N, N)",
         ],
@@ -177,10 +177,10 @@ def draw_pipeline(palette, save_prefix="docs/pipeline"):
         ],
         [  # Stage 3
             "Generate surrogates of y:",
-            "  FFT      | power spectrum",
-            "  AAFT    | + amplitude dist.",
-            "  iAAFT   | exact both",
-            "  Timeshift | local structure",
+            "  iAAFT       | spectrum + amp.",
+            "  Cycle-phase  | oscillatory",
+            "  Twin         | recurrence",
+            "  + 9 more (12 uni + 2 multi)",
         ],
         [  # Stage 4
             "p = rank(\u03c1_obs vs {\u03c1_surr})",
@@ -190,8 +190,8 @@ def draw_pipeline(palette, save_prefix="docs/pipeline"):
         ],
         [  # Stage 5
             "AUROC  (raw \u03c1)",
-            "AUROC  (surrogate p-val)",
             "AUROC  (z-score)",
+            "AUPRC  (z-score)",
             "\u0394AUROC = surr. \u2212 raw",
         ],
     ]
@@ -232,7 +232,7 @@ def draw_pipeline(palette, save_prefix="docs/pipeline"):
     ctext(out_x + io_w / 2, inp_y + io_h / 2 + 0.12,
           "Output", fontsize=9, fontweight="bold", color=C["text_detail"])
     ctext(out_x + io_w / 2, inp_y + io_h / 2 - 0.12,
-          "Detected edges, p-values, z-scores, AUROC, \u0394AUROC",
+          "Detected edges, p-values, z-scores, AUROC, AUPRC, \u0394AUROC",
           fontsize=7.5, color=C["text_detail"])
 
     # ── Arrows: input -> stage 1 detail, stage 5 detail -> output

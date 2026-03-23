@@ -98,7 +98,7 @@ python run_diagnostic_experiments.py --only D1 D2
 ## Project Structure
 
 ```
-surrogate-ccm/
+seccm/
 ├── run_experiments.py              # CLI entry point (all experiments)
 ├── run_diagnostic_experiments.py   # CLI for diagnostic framework (D1, D2, E5, E7)
 ├── configs/
