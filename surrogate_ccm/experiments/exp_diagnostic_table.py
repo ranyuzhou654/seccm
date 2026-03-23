@@ -228,6 +228,8 @@ def run_diagnostic_table_experiment(config, output_dir="results/diagnostic_table
     # ---- Plots ----
     _plot_heatmap(agg, output_dir)
     _plot_regime_scatter(agg, output_dir)
+    _plot_surrogate_ranking(agg, output_dir)
+    _plot_per_system_bars(df, output_dir)
 
     return df
 
@@ -343,6 +345,90 @@ def _plot_heatmap(agg, output_dir):
     fig.savefig(os.path.join(output_dir, "heatmap_delta_auroc.pdf"),
                 dpi=300, bbox_inches="tight")
     fig.savefig(os.path.join(output_dir, "heatmap_delta_auroc.png"),
+                dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+
+def _plot_surrogate_ranking(agg, output_dir):
+    """Bar chart: mean ΔAUROC per surrogate, averaged across all systems."""
+    surr_agg = agg.groupby("surrogate")["AUC_ROC_delta_zscore"].agg(
+        ["mean", "std"]
+    ).sort_values("mean", ascending=False)
+
+    fig, ax = plt.subplots(figsize=(12, 5))
+    colors = ["#e74c3c" if "cycle_phase" in s else "#3498db"
+              for s in surr_agg.index]
+    ax.bar(range(len(surr_agg)), surr_agg["mean"], yerr=surr_agg["std"],
+           color=colors, alpha=0.85, capsize=4, edgecolor="black", linewidth=0.5)
+    ax.set_xticks(range(len(surr_agg)))
+    ax.set_xticklabels(surr_agg.index, rotation=45, ha="right", fontsize=10)
+    ax.axhline(y=0, color="gray", linestyle="--", alpha=0.5)
+    ax.set_ylabel("Mean ΔAUROC (across all systems)", fontsize=12)
+    ax.set_title("D1: Surrogate Method Ranking (averaged over 8 systems)",
+                 fontsize=13)
+    ax.grid(True, alpha=0.3, axis="y")
+
+    # Annotate values
+    for i, (_, row) in enumerate(surr_agg.iterrows()):
+        ax.text(i, row["mean"] + row["std"] + 0.005,
+                f"{row['mean']:.3f}", ha="center", va="bottom", fontsize=8)
+
+    fig.tight_layout()
+    fig.savefig(os.path.join(output_dir, "surrogate_ranking.pdf"),
+                dpi=300, bbox_inches="tight")
+    fig.savefig(os.path.join(output_dir, "surrogate_ranking.png"),
+                dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+
+def _plot_per_system_bars(df, output_dir):
+    """Per-system grouped bar chart: ΔAUROC for each surrogate, with error bars."""
+    systems    = sorted(df["system"].unique())
+    surrogates = sorted(df["surrogate"].unique())
+    n_surr     = len(surrogates)
+
+    # colour palette: cycle_phase variants red, others blue shades
+    palette = {}
+    blues = plt.cm.Blues(np.linspace(0.35, 0.85, n_surr))
+    for i, s in enumerate(surrogates):
+        if "cycle_phase" in s.lower():
+            palette[s] = "#e74c3c" if s.endswith("A") else "#e67e22"
+        else:
+            palette[s] = blues[i]
+
+    n_cols = min(4, len(systems))
+    n_rows = (len(systems) + n_cols - 1) // n_cols
+    fig, axes = plt.subplots(n_rows, n_cols,
+                             figsize=(5 * n_cols, 4.5 * n_rows),
+                             squeeze=False)
+
+    for idx, sys_name in enumerate(systems):
+        ax = axes[idx // n_cols][idx % n_cols]
+        sub = df[df["system"] == sys_name]
+        agg = sub.groupby("surrogate")["AUC_ROC_delta_zscore"].agg(
+            ["mean", "std"]
+        ).reindex(surrogates)
+
+        colors = [palette.get(s, "#3498db") for s in surrogates]
+        ax.bar(range(n_surr), agg["mean"], yerr=agg["std"],
+               color=colors, alpha=0.85, capsize=2,
+               edgecolor="black", linewidth=0.4)
+        ax.set_xticks(range(n_surr))
+        ax.set_xticklabels(surrogates, rotation=60, ha="right", fontsize=7)
+        ax.axhline(y=0, color="gray", linestyle="--", alpha=0.5)
+        ax.set_ylabel("ΔAUROC", fontsize=9)
+        ax.set_title(sys_name, fontsize=11, fontweight="bold")
+        ax.grid(True, alpha=0.3, axis="y")
+
+    # Hide empty subplots
+    for idx in range(len(systems), n_rows * n_cols):
+        axes[idx // n_cols][idx % n_cols].set_visible(False)
+
+    fig.suptitle("D1: ΔAUROC per Surrogate Method (by system)", fontsize=14, y=1.01)
+    fig.tight_layout()
+    fig.savefig(os.path.join(output_dir, "per_system_bars.pdf"),
+                dpi=300, bbox_inches="tight")
+    fig.savefig(os.path.join(output_dir, "per_system_bars.png"),
                 dpi=150, bbox_inches="tight")
     plt.close(fig)
 
