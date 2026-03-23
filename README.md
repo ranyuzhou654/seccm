@@ -23,13 +23,14 @@ CCM detects causal relationships by exploiting **Takens' embedding theorem**: if
 
 ## Features
 
-- **7 coupled dynamical systems** — Logistic, Lorenz, Henon, Rossler, Hindmarsh-Rose, FitzHugh-Nagumo, Kuramoto
-- **10 univariate + 2 multivariate surrogate methods + adaptive selection** — FFT, AAFT, iAAFT, time-shift, random reorder, cycle-shuffle, twin, phase, small-shuffle, truncated Fourier; multivariate FFT/iAAFT (cross-correlation preserving); `auto` mode selects per-variable based on spectral concentration
+- **8 coupled dynamical systems** — Logistic, Lorenz, Henon, Rossler, Hindmarsh-Rose, FitzHugh-Nagumo, Kuramoto, Van der Pol
+- **12 univariate + 2 multivariate surrogate methods + adaptive selection** — FFT, AAFT, iAAFT, time-shift, random reorder, cycle-shuffle, twin, phase, small-shuffle, truncated Fourier, cycle-phase-A, cycle-phase-B; multivariate FFT/iAAFT (cross-correlation preserving); `auto` mode selects per-variable based on spectral concentration
 - **Automatic embedding** — data-driven selection of embedding dimension (E) and delay (tau) via mutual information and simplex prediction, FNN, or Cao's method; non-uniform delay embedding for multi-timescale systems
 - **Convergence testing** — cross-validated ρ(L) convergence with Kendall-τ scoring
 - **Chaos pre-detection** — 0-1 test for chaos (Gottwald & Melbourne) with auto-subsampling for ODE flows
 - **Network-scale testing** — pairwise CCM with Benjamini-Hochberg FDR correction, Theiler window, adaptive effect-size thresholds
-- **6 experiment modules** — bivariate validation, coupling strength sweep, noise robustness, topology comparison, surrogate method comparison, robustness ablation study
+- **Surrogate diagnostic framework** — SSO (Surrogate Spectral Overlap), AUPRC, rho_gap, null_overlap, convergence_fraction metrics for diagnosing when surrogates help CCM
+- **10 experiment modules** — bivariate validation, coupling strength sweep, noise robustness, topology comparison, surrogate method comparison, robustness ablation, diagnostic table, regime boundary sweep, convergence analysis, noise robustness with cycle detection
 - **Publication-ready output** — 300 DPI figures (PDF + PNG), LaTeX tables, CSV data
 
 ## Installation
@@ -83,13 +84,23 @@ python run_experiments.py --experiment robustness --n-jobs 16 --output-dir resul
 
 # Smoke test (fast, ~10 seconds)
 python run_experiments.py --experiment robustness --config configs/robustness_smoke.yaml
+
+# Run diagnostic framework experiments (D1, D2, E5, E7)
+python run_diagnostic_experiments.py --n-jobs 8
+
+# Feasibility mode (small scale, fast)
+python run_diagnostic_experiments.py --feasibility --n-jobs 5
+
+# Run specific diagnostic experiment(s)
+python run_diagnostic_experiments.py --only D1 D2
 ```
 
 ## Project Structure
 
 ```
 surrogate-ccm/
-├── run_experiments.py              # CLI entry point
+├── run_experiments.py              # CLI entry point (all experiments)
+├── run_diagnostic_experiments.py   # CLI for diagnostic framework (D1, D2, E5, E7)
 ├── configs/
 │   ├── default.yaml                # Full experiment configuration
 │   └── robustness_smoke.yaml       # Fast smoke test config
@@ -106,14 +117,15 @@ surrogate-ccm/
 │   │   ├── random_reorder.py       #   random permutation
 │   │   ├── cycle_shuffle_surrogate.py  #   cycle-shuffle for oscillatory systems
 │   │   ├── twin_surrogate.py       #   twin surrogate (recurrence-based)
-│   │   ├── phase_surrogate.py     #   phase surrogate (Hilbert-based)
+│   │   ├── phase_surrogate.py      #   phase surrogate (Hilbert-based)
 │   │   ├── small_shuffle_surrogate.py  #   small-shuffle surrogate
 │   │   ├── truncated_fourier_surrogate.py  #   band-selective phase randomization
-│   │   ├── adaptive.py            #   adaptive method selection by signal profile
-│   │   └── multivariate_surrogate.py  #   multivariate FFT/iAAFT (cross-corr preserving)
+│   │   ├── cycle_phase_surrogate.py    #   cycle-phase surrogates (A: within-cycle, B: + cycle permutation)
+│   │   ├── adaptive.py             #   adaptive method selection by signal profile
+│   │   └── multivariate_surrogate.py   #   multivariate FFT/iAAFT (cross-corr preserving)
 │   ├── testing/                    # Statistical testing
 │   │   ├── hypothesis_test.py      #   p-value, z-score, FDR correction
-│   │   └── se_ccm.py              #   SECCM class (full pipeline)
+│   │   └── se_ccm.py              #   SECCM class (full pipeline, AUROC + AUPRC)
 │   ├── generators/                 # Coupled dynamical system simulators
 │   │   ├── network.py              #   network topology generation (ER, WS, ring)
 │   │   ├── logistic.py             #   coupled logistic map
@@ -122,8 +134,9 @@ surrogate-ccm/
 │   │   ├── rossler.py              #   coupled Rossler oscillators
 │   │   ├── hindmarsh_rose.py       #   Hindmarsh-Rose neural network
 │   │   ├── fitzhugh_nagumo.py      #   FitzHugh-Nagumo neural network
-│   │   └── kuramoto.py             #   Kuramoto phase oscillators
-│   ├── evaluation/                 # Detection metrics (TPR, FPR, AUROC)
+│   │   ├── kuramoto.py             #   Kuramoto phase oscillators
+│   │   └── van_der_pol.py          #   coupled van der Pol oscillators
+│   ├── evaluation/                 # Detection metrics (TPR, FPR, AUROC, AUPRC, SSO)
 │   ├── visualization/              # Plotting utilities
 │   ├── experiments/                # Experiment modules
 │   │   ├── exp_bivariate.py        #   2-node sanity check
@@ -131,7 +144,11 @@ surrogate-ccm/
 │   │   ├── exp_noise.py
 │   │   ├── exp_network_topology.py
 │   │   ├── exp_surrogate_comparison.py
-│   │   └── exp_surrogate_robustness.py
+│   │   ├── exp_surrogate_robustness.py
+│   │   ├── exp_diagnostic_table.py     #   D1: full diagnostic table (8 systems × 12 surrogates)
+│   │   ├── exp_regime_boundaries.py    #   D2: regime boundary sweep (coupling × system)
+│   │   ├── exp_convergence.py          #   E5: convergence analysis (AUROC vs T)
+│   │   └── exp_noise_robustness.py     #   E7: noise robustness + cycle detection quality
 │   └── utils/                      # I/O, parallel execution, chaos detection
 ├── ccm.py                          # Advanced standalone CCM (latent CCM, convergence scoring)
 └── system.py                       # Advanced standalone simulator (RK4, process noise, BA/SF graphs)
@@ -147,6 +164,10 @@ surrogate-ccm/
 | `topology` | `--experiment topology` | Compare ER, WS, ring topologies at varying network sizes |
 | `surrogate` | `--experiment surrogate` | Compare 10 surrogate methods across 7 systems |
 | `robustness` | `--experiment robustness` | Ablation: sweep T, coupling, obs-noise, dyn-noise |
+| `diagnostic_table` | `--experiment diagnostic_table` | D1: Full diagnostic table (8 systems × 12 surrogates × 20 reps) |
+| `regime_boundaries` | `--experiment regime_boundaries` | D2: Regime boundary sweep across coupling strengths |
+| `convergence` | `--experiment convergence` | E5: AUROC convergence analysis vs time series length |
+| `noise_robustness` | `--experiment noise_robustness` | E7: Noise robustness + cycle detection quality |
 
 ### Robustness Experiment Details
 
@@ -177,6 +198,7 @@ The robustness experiment runs 4 sub-experiments, each sweeping one factor while
 | Hindmarsh-Rose | ODE (neural) | 3 | x (membrane) | I_ext = 3.5, r = 0.01 |
 | FitzHugh-Nagumo | ODE (neural) | 2 | v (membrane) | I_ext = 0.5, tau = 12.5 |
 | Kuramoto | ODE (oscillator) | 1 | sin(theta) | omega ~ N(1.0, 0.2) |
+| Van der Pol | ODE (oscillator) | 2 | x | mu = 1.0 |
 
 All systems support:
 - **Observation noise** (`noise_std`): Gaussian noise added to the final output
@@ -198,6 +220,8 @@ All systems support:
 | **Small-shuffle** | Large-scale trends | Fine temporal order | Trending data | Very fast |
 | **Truncated Fourier** | Structure outside target band | Phase within target band | Multi-timescale analysis | Fast |
 | **Multivariate FFT** | Cross-correlations + power spectra | Nonlinear cross-dependencies | Linearly coupled systems | Fast |
+| **Cycle-phase A** | Intra-cycle waveform + cycle count | Inter-cycle phase alignment | **Phase-coupled oscillatory** (VdP, Kuramoto) | Fast |
+| **Cycle-phase B** | Intra-cycle waveform | Cycle order + phase alignment | **Phase-coupled oscillatory** (stronger null) | Fast |
 | **Multivariate iAAFT** | Cross-corr + spectra + amplitude dist. | Nonlinear cross-dependencies | Linearly coupled systems | Moderate |
 
 ### Cycle-Shuffle Surrogate
@@ -233,6 +257,12 @@ Designed for **phase-coupled oscillatory systems** (Kuramoto, FHN) where cycle-s
 ### Small-Shuffle Surrogate
 
 A middle ground between time-shift (too conservative) and random-reorder (too aggressive). Perturbs each time index by a small random amount (±δ), preserving large-scale trends while destroying fine temporal alignment.
+
+### Cycle-Phase Surrogate
+
+Designed for **phase-coupled oscillatory systems** (Van der Pol, Kuramoto) where cycle-shuffle fails because cycles are too uniform and spectral surrogates preserve the causal periodic structure.
+
+**Algorithm:** Hilbert transform → extract instantaneous phase → identify cycle boundaries (2π crossings) → **Mode A:** circular-shift time points within each cycle (preserves cycle count and waveform shape) → **Mode B:** additionally permute cycle order (stronger null hypothesis). Falls back to peaks-based cycle detection if Hilbert fails.
 
 ### Truncated Fourier Surrogate
 
@@ -300,10 +330,12 @@ M = delay_embed_nonuniform(data[:, 0], delays)         # custom delay embedding
 from surrogate_ccm.surrogate import generate_surrogate, select_surrogate_method
 from surrogate_ccm.surrogate import generate_multivariate_surrogate
 
-surrogates = generate_surrogate(data[:, 0], method="aaft", n_surrogates=99)         # -> (99, T)
+surrogates = generate_surrogate(data[:, 0], method="aaft", n_surrogates=99)           # -> (99, T)
 surrogates = generate_surrogate(data[:, 0], method="cycle_shuffle", n_surrogates=99) # oscillatory
 surrogates = generate_surrogate(data[:, 0], method="twin", n_surrogates=99)          # recurrence-based
-method, profile = select_surrogate_method(data[:, 0])                               # auto-select method
+surrogates = generate_surrogate(data[:, 0], method="cycle_phase_A", n_surrogates=99) # cycle-phase (within-cycle)
+surrogates = generate_surrogate(data[:, 0], method="cycle_phase_B", n_surrogates=99) # cycle-phase (+ permute order)
+method, profile = select_surrogate_method(data[:, 0])                                # auto-select method
 
 # Multivariate surrogates (preserves cross-correlations between variables)
 mv_surr = generate_multivariate_surrogate(data, method="multivariate_fft", n_surrogates=99)  # list of (T,N)
@@ -313,6 +345,11 @@ from surrogate_ccm.utils import test_01_chaos, is_chaotic
 
 K, K_values = test_01_chaos(data[:, 0])                # K ≈ 1 → chaotic, K ≈ 0 → regular
 chaotic, K = is_chaotic(data[:, 0])                    # quick boolean check
+
+# ── Diagnostic Metrics ─────────────────────────────────
+from surrogate_ccm.evaluation.metrics import compute_sso
+
+sso = compute_sso(data[:, 0], surrogates)  # Surrogate Spectral Overlap (JSD of PSDs)
 
 # ── Full Pipeline ───────────────────────────────────────
 from surrogate_ccm.testing import SECCM
