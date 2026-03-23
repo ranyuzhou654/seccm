@@ -30,7 +30,7 @@ from ..utils.parallel import parallel_map
 
 DEFAULT_SYSTEMS = {
     "logistic":         {"N": 5, "coupling": 0.3,  "T": 2000, "sys_kwargs": {}},
-    "henon":            {"N": 5, "coupling": 0.2,  "T": 2000, "sys_kwargs": {}},
+    "henon":            {"N": 5, "coupling": 0.1,  "T": 2000, "sys_kwargs": {}},
     "lorenz":           {"N": 5, "coupling": 0.5,  "T": 2000, "sys_kwargs": {"dt": 0.01}},
     "rossler":          {"N": 5, "coupling": 0.15, "T": 5000, "sys_kwargs": {"dt": 0.05}},
     "kuramoto":         {"N": 5, "coupling": 0.5,  "T": 2000, "sys_kwargs": {}},
