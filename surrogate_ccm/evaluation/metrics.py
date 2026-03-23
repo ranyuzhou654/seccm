@@ -111,3 +111,55 @@ def compute_delta_rho(rho_obs, rho_surr):
     delta : float
     """
     return rho_obs - np.mean(rho_surr)
+
+
+def compute_sso(x, surrogates):
+    """Compute Surrogate Spectral Overlap (SSO) via Jensen-Shannon divergence.
+
+    SSO quantifies how much a surrogate method preserves the spectral
+    structure of the original signal. Low SSO (→ 0) means the surrogate
+    spectrum closely matches the original, implying the surrogate cannot
+    disrupt the attractor geometry — problematic for oscillatory systems.
+
+    Parameters
+    ----------
+    x : ndarray, shape (T,)
+        Original time series.
+    surrogates : ndarray, shape (n_surrogates, T)
+        Array of surrogate time series.
+
+    Returns
+    -------
+    sso : float
+        Jensen-Shannon divergence between normalized PSDs of x and
+        the surrogate ensemble mean PSD. In [0, ln(2)] ≈ [0, 0.693].
+    """
+    x = np.asarray(x, dtype=float).ravel()
+
+    # Compute PSD of original
+    psd_x = np.abs(np.fft.rfft(x - np.mean(x))) ** 2
+    psd_x = psd_x[1:]  # exclude DC
+
+    # Compute mean PSD across surrogates
+    n_surr = surrogates.shape[0]
+    psd_surr_sum = np.zeros_like(psd_x)
+    for i in range(n_surr):
+        s = surrogates[i]
+        psd_s = np.abs(np.fft.rfft(s - np.mean(s))) ** 2
+        psd_surr_sum += psd_s[1:]
+    psd_surr_mean = psd_surr_sum / n_surr
+
+    # Normalize to probability distributions
+    eps = 1e-30  # avoid log(0)
+    p = psd_x / (psd_x.sum() + eps) + eps
+    q = psd_surr_mean / (psd_surr_mean.sum() + eps) + eps
+
+    # Renormalize after adding eps
+    p = p / p.sum()
+    q = q / q.sum()
+
+    # Jensen-Shannon divergence
+    m = 0.5 * (p + q)
+    jsd = 0.5 * np.sum(p * np.log(p / m)) + 0.5 * np.sum(q * np.log(q / m))
+
+    return float(jsd)

@@ -147,7 +147,8 @@ def select_surrogate_method(x, available_methods=None):
     if available_methods is None:
         available_methods = ["fft", "aaft", "iaaft", "timeshift",
                              "cycle_shuffle", "twin", "phase",
-                             "small_shuffle"]
+                             "small_shuffle", "cycle_phase_A",
+                             "cycle_phase_B"]
 
     profile = signal_profile(x)
     method = profile["recommended_method"]

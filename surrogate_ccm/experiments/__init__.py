@@ -7,3 +7,9 @@ from .exp_noise import run_noise_experiment
 from .exp_surrogate_comparison import run_surrogate_comparison_experiment
 from .exp_surrogate_robustness import run_surrogate_robustness_experiment
 from .exp_trivariate import run_trivariate_experiment
+from .exp_sso_correlation import run_sso_correlation_experiment
+from .exp_cycle_phase import run_cycle_phase_experiment
+from .exp_diagnostic_table import run_diagnostic_table_experiment
+from .exp_regime_boundaries import run_regime_boundary_experiment
+from .exp_convergence import run_convergence_experiment
+from .exp_noise_robustness import run_noise_robustness_experiment

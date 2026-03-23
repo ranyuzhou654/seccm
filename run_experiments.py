@@ -14,6 +14,12 @@ from surrogate_ccm.experiments import (
     run_surrogate_comparison_experiment,
     run_surrogate_robustness_experiment,
     run_trivariate_experiment,
+    run_sso_correlation_experiment,
+    run_cycle_phase_experiment,
+    run_diagnostic_table_experiment,
+    run_regime_boundary_experiment,
+    run_convergence_experiment,
+    run_noise_robustness_experiment,
 )
 from surrogate_ccm.utils.io import load_config
 
@@ -26,6 +32,12 @@ EXPERIMENTS = {
     "surrogate": run_surrogate_comparison_experiment,
     "robustness": run_surrogate_robustness_experiment,
     "trivariate": run_trivariate_experiment,
+    "sso_correlation": run_sso_correlation_experiment,
+    "cycle_phase": run_cycle_phase_experiment,
+    "diagnostic_table": run_diagnostic_table_experiment,
+    "regime_boundaries": run_regime_boundary_experiment,
+    "convergence": run_convergence_experiment,
+    "noise_robustness": run_noise_robustness_experiment,
 }
 
 

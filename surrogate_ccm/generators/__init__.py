@@ -8,6 +8,7 @@ from .logistic import LogisticNetwork
 from .lorenz import LorenzNetwork
 from .network import generate_network
 from .rossler import RosslerNetwork
+from .van_der_pol import VanDerPolNetwork
 
 SYSTEM_CLASSES = {
     "logistic": LogisticNetwork,
@@ -17,6 +18,7 @@ SYSTEM_CLASSES = {
     "hindmarsh_rose": HindmarshRoseNetwork,
     "fitzhugh_nagumo": FitzHughNagumoNetwork,
     "kuramoto": KuramotoNetwork,
+    "van_der_pol": VanDerPolNetwork,
 }
 
 

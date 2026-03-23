@@ -1,0 +1,80 @@
+# Configuration for SSO Theory + Cycle-Phase Surrogate Experiments
+# E1: SSO Correlation, E2-E4: Cycle-Phase Validation
+
+n_jobs: -1
+output_dir: results
+
+sso_correlation:
+  n_surrogates: 100
+  n_reps: 10
+  seed: 42
+  systems:
+    logistic:
+      N: 5
+      coupling: 0.3
+      T: 2000
+      sys_kwargs: {}
+    henon:
+      N: 5
+      coupling: 0.3
+      T: 2000
+      sys_kwargs: {}
+    lorenz:
+      N: 5
+      coupling: 0.5
+      T: 2000
+      sys_kwargs:
+        dt: 0.01
+    rossler:
+      N: 5
+      coupling: 0.15
+      T: 5000
+      sys_kwargs:
+        dt: 0.05
+    kuramoto:
+      N: 5
+      coupling: 0.5
+      T: 2000
+      sys_kwargs: {}
+    hindmarsh_rose:
+      N: 5
+      coupling: 0.2
+      T: 10000
+      sys_kwargs: {}
+    fitzhugh_nagumo:
+      N: 5
+      coupling: 0.3
+      T: 2000
+      sys_kwargs: {}
+    van_der_pol:
+      N: 5
+      coupling: 0.3
+      T: 5000
+      sys_kwargs: {}
+  surrogates:
+    - fft
+    - aaft
+    - iaaft
+    - timeshift
+    - random_reorder
+    - cycle_shuffle
+    - twin
+    - phase
+    - small_shuffle
+    - truncated_fourier
+    - cycle_phase_A
+    - cycle_phase_B
+
+cycle_phase:
+  n_surrogates: 200
+  n_reps: 20
+  N: 5
+  seed: 42
+  e2_couplings: [0.05, 0.1, 0.15, 0.2, 0.3]
+  e2_T_values: [1000, 2000, 5000, 10000]
+  e2_surrogates:
+    - iaaft
+    - fft
+    - cycle_shuffle
+    - cycle_phase_A
+    - cycle_phase_B

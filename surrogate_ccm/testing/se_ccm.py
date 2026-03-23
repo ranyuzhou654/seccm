@@ -325,11 +325,12 @@ class SECCM:
         y_true = adj_true[mask].ravel().astype(int)
 
         if len(np.unique(y_true)) > 1:
-            from sklearn.metrics import roc_auc_score
+            from sklearn.metrics import roc_auc_score, average_precision_score
 
             # Raw CCM: use ρ as score
             rho_scores = self.ccm_matrix_[mask].ravel()
             metrics["AUC_ROC_rho"] = roc_auc_score(y_true, rho_scores)
+            metrics["AUC_PR_rho"] = average_precision_score(y_true, rho_scores)
 
             # Surrogate-enhanced: use 1-p as score (rank-based)
             p_scores = 1.0 - self.pvalue_matrix_[mask].ravel()
@@ -339,6 +340,7 @@ class SECCM:
             z_scores = self.zscore_matrix_[mask].ravel()
             z_scores = np.nan_to_num(z_scores, nan=0.0)
             metrics["AUC_ROC_zscore"] = roc_auc_score(y_true, z_scores)
+            metrics["AUC_PR_zscore"] = average_precision_score(y_true, z_scores)
 
             metrics["AUC_ROC_delta"] = (
                 metrics["AUC_ROC_surrogate"] - metrics["AUC_ROC_rho"]
@@ -352,5 +354,7 @@ class SECCM:
             metrics["AUC_ROC_zscore"] = np.nan
             metrics["AUC_ROC_delta"] = np.nan
             metrics["AUC_ROC_delta_zscore"] = np.nan
+            metrics["AUC_PR_rho"] = np.nan
+            metrics["AUC_PR_zscore"] = np.nan
 
         return metrics

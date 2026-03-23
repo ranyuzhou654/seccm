@@ -12,6 +12,10 @@ from .twin_surrogate import twin_surrogate, _precompute_twins
 from .phase_surrogate import phase_surrogate
 from .small_shuffle_surrogate import small_shuffle_surrogate
 from .truncated_fourier_surrogate import truncated_fourier_surrogate
+from .cycle_phase_surrogate import (
+    cycle_phase_surrogate_A,
+    cycle_phase_surrogate_B,
+)
 from .adaptive import select_surrogate_method, signal_profile
 from .multivariate_surrogate import (
     multivariate_fft_surrogate,
@@ -29,6 +33,8 @@ SURROGATE_METHODS = {
     "phase": phase_surrogate,
     "small_shuffle": small_shuffle_surrogate,
     "truncated_fourier": truncated_fourier_surrogate,
+    "cycle_phase_a": cycle_phase_surrogate_A,
+    "cycle_phase_b": cycle_phase_surrogate_B,
 }
 
 
