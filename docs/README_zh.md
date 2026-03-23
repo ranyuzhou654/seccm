@@ -359,9 +359,9 @@ seccm.convergence_matrix_      # 收敛分数（需启用 convergence_filter）
 如果您在研究中使用了本软件，请引用：
 
 ```bibtex
-@software{seccm2025,
+@software{seccm2026,
   title  = {SE-CCM: Surrogate-Enhanced Convergent Cross Mapping},
-  year   = {2025},
+  year   = {2026},
   url    = {https://github.com/ranyuzhou654/seccm}
 }
 ```

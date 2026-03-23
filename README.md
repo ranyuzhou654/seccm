@@ -380,9 +380,9 @@ seccm.convergence_matrix_      # convergence scores (if convergence_filter=True)
 If you use this software in your research, please cite:
 
 ```bibtex
-@software{seccm2025,
+@software{seccm2026,
   title  = {SE-CCM: Surrogate-Enhanced Convergent Cross Mapping},
-  year   = {2025},
+  year   = {2026},
   url    = {https://github.com/ranyuzhou654/seccm}
 }
 ```
