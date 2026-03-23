@@ -36,8 +36,8 @@ CCM detects causal relationships by exploiting **Takens' embedding theorem**: if
 ## Installation
 
 ```bash
-git clone https://github.com/your-username/surrogate-ccm.git
-cd surrogate-ccm
+git clone https://github.com/ranyuzhou654/seccm.git
+cd seccm
 pip install -e .
 ```
 
@@ -383,7 +383,7 @@ If you use this software in your research, please cite:
 @software{seccm2025,
   title  = {SE-CCM: Surrogate-Enhanced Convergent Cross Mapping},
   year   = {2025},
-  url    = {https://github.com/your-username/surrogate-ccm}
+  url    = {https://github.com/ranyuzhou654/seccm}
 }
 ```
 
