@@ -17,6 +17,7 @@ import seaborn as sns
 from tqdm import tqdm
 
 from ..generators import create_system, generate_network
+from ._config_helpers import collect_seccm_kwargs, get_system_kwargs
 from ..testing.se_ccm import SECCM
 from ..utils.parallel import parallel_map
 
@@ -142,11 +143,11 @@ def _run_single_rep(args):
     """Run one repetition for a given parameter configuration."""
     (system_name, topology, N, eps, method, n_surr,
      T, transient, noise_std, dyn_noise_std, seed, net_kwargs, fdr,
-     extra_seccm_kwargs) = args
+     extra_seccm_kwargs, sys_kwargs) = args
 
     try:
         adj = generate_network(topology, N, seed=seed, **net_kwargs)
-        system = create_system(system_name, adj, eps)
+        system = create_system(system_name, adj, eps, **sys_kwargs)
         data = system.generate(T, transient=transient, seed=seed,
                                noise_std=noise_std, dyn_noise_std=dyn_noise_std)
 
@@ -203,6 +204,7 @@ def _run_sweep(sweep_name, sweep_param, sweep_values_map, systems, methods,
     fdr = fixed_params["fdr"]
     seed_base = fixed_params["seed_base"]
     extra_seccm_kwargs = fixed_params.get("extra_seccm_kwargs", {})
+    system_kwargs_map = fixed_params.get("system_kwargs", {})
 
     net_kwargs = {"p": er_p}
 
@@ -242,7 +244,8 @@ def _run_sweep(sweep_name, sweep_param, sweep_values_map, systems, methods,
         args_list = [
             (sys_name, topology, N, eps, method, n_surr,
              run_T, transient, run_noise, run_dyn_noise,
-             seed_base + i, net_kwargs, fdr, extra_seccm_kwargs)
+             seed_base + i, net_kwargs, fdr, extra_seccm_kwargs,
+             system_kwargs_map.get(sys_name, {}))
             for i in range(n_reps)
         ]
 
@@ -926,12 +929,8 @@ def run_surrogate_robustness_experiment(config, output_dir, n_jobs=-1):
 
     # Extra SECCM kwargs from config (theiler_w, adaptive_rho, E_method, etc.)
     seccm_cfg = cfg.get("seccm_kwargs", {})
-    extra_seccm_kwargs = {}
-    for key in ("theiler_w", "adaptive_rho", "E_method",
-                "convergence_filter", "convergence_threshold",
-                "min_rho", "adaptive_rho_quantile", "iaaft_max_iter"):
-        if key in seccm_cfg:
-            extra_seccm_kwargs[key] = seccm_cfg[key]
+    extra_seccm_kwargs = collect_seccm_kwargs(seccm_cfg)
+    system_kwargs = {sys: get_system_kwargs(config, sys) for sys in systems}
 
     # Common fixed params (overridden per sub-experiment as needed)
     base_fixed = dict(
@@ -940,6 +939,7 @@ def run_surrogate_robustness_experiment(config, output_dir, n_jobs=-1):
         noise_std=0.0, dyn_noise_std=0.0,
         er_p=er_p, n_reps=n_reps, fdr=fdr, seed_base=seed_base,
         extra_seccm_kwargs=extra_seccm_kwargs,
+        system_kwargs=system_kwargs,
     )
 
     all_dfs = {}

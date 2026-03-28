@@ -9,6 +9,7 @@ import numpy as np
 from tqdm import tqdm
 
 from ..generators import create_system, generate_network
+from ._config_helpers import get_system_kwargs
 from ..testing.se_ccm import SECCM
 from ..visualization.convergence_plot import plot_convergence
 from ..visualization.heatmap import plot_comparison_heatmaps
@@ -57,6 +58,7 @@ def run_bivariate_experiment(config, output_dir="results/bivariate"):
 
     for system_name in systems:
         eps = coupling_map.get(system_name, default_coupling.get(system_name, 0.1))
+        sys_kwargs = get_system_kwargs(config, system_name)
         print(f"\n=== Bivariate test: {system_name} (ε={eps}) ===")
         system_results = {"TPR": [], "FPR": []}
 
@@ -67,7 +69,7 @@ def run_bivariate_experiment(config, output_dir="results/bivariate"):
 
             for _eps in [eps]:
                 try:
-                    system = create_system(system_name, adj, eps)
+                    system = create_system(system_name, adj, eps, **sys_kwargs)
                     data = system.generate(T, transient=transient, seed=seed)
                 except RuntimeError as e:
                     tqdm.write(f"  Rep {rep}: {e}")

@@ -15,6 +15,7 @@ import seaborn as sns
 from tqdm import tqdm
 
 from ..generators import create_system, generate_network
+from ._config_helpers import collect_seccm_kwargs, get_system_kwargs
 from ..testing.se_ccm import SECCM
 from ..utils.parallel import parallel_map
 
@@ -38,14 +39,15 @@ def _run_single_rep(args):
     enabling paired comparison.
     """
     (system_name, topology, N, eps, method, n_surr,
-     ts_cfg, seed, net_kwargs, fdr, extra_seccm_kwargs) = args
+     ts_cfg, seed, net_kwargs, fdr, extra_seccm_kwargs,
+     sys_kwargs) = args
 
     T = ts_cfg.get("T", 3000)
     transient = ts_cfg.get("transient", 1000)
 
     try:
         adj = generate_network(topology, N, seed=seed, **net_kwargs)
-        system = create_system(system_name, adj, eps)
+        system = create_system(system_name, adj, eps, **sys_kwargs)
         data = system.generate(T, transient=transient, seed=seed)
 
         seccm = SECCM(
@@ -87,12 +89,8 @@ def run_surrogate_comparison_experiment(config, output_dir, n_jobs=-1):
 
     # Extra SECCM kwargs from config
     seccm_cfg = cfg.get("seccm_kwargs", {})
-    extra_seccm_kwargs = {}
-    for key in ("theiler_w", "adaptive_rho", "E_method",
-                "convergence_filter", "convergence_threshold",
-                "min_rho", "adaptive_rho_quantile", "iaaft_max_iter"):
-        if key in seccm_cfg:
-            extra_seccm_kwargs[key] = seccm_cfg[key]
+    extra_seccm_kwargs = collect_seccm_kwargs(seccm_cfg)
+    sys_kwargs_map = {sys: get_system_kwargs(config, sys) for sys in systems}
 
     net_kwargs = {"p": er_p}
 
@@ -113,7 +111,8 @@ def run_surrogate_comparison_experiment(config, output_dir, n_jobs=-1):
 
         args_list = [
             (sys_name, topology, N, eps, method, n_surr,
-             ts_cfg, seed_base + rep, net_kwargs, fdr, extra_seccm_kwargs)
+             ts_cfg, seed_base + rep, net_kwargs, fdr, extra_seccm_kwargs,
+             sys_kwargs_map.get(sys_name, {}))
             for rep in range(n_reps)
         ]
 

@@ -9,6 +9,7 @@ import numpy as np
 from tqdm import tqdm
 
 from ..generators import create_system, generate_network
+from ._config_helpers import get_system_kwargs
 from ..testing.se_ccm import SECCM
 from ..utils.parallel import parallel_map
 from ..visualization.network_plot import plot_performance_curves
@@ -16,7 +17,7 @@ from ..visualization.network_plot import plot_performance_curves
 
 def _run_single_rep(args):
     """Run a single repetition for a given topology and network size."""
-    system_name, topology, N, eps, surr_cfg, ts_cfg, seed, net_kwargs = args
+    system_name, topology, N, eps, surr_cfg, ts_cfg, seed, net_kwargs, sys_kwargs = args
 
     T = ts_cfg.get("T", 3000)
     transient = ts_cfg.get("transient", 1000)
@@ -25,7 +26,7 @@ def _run_single_rep(args):
     adj = generate_network(topology, N, seed=seed, **net_kwargs)
 
     try:
-        system = create_system(system_name, adj, eps)
+        system = create_system(system_name, adj, eps, **sys_kwargs)
         data = system.generate(T, transient=transient, seed=seed)
 
         seccm = SECCM(
@@ -77,6 +78,7 @@ def run_network_topology_experiment(config, output_dir="results/topology", n_job
     all_results = {}
     total_combos = len(systems) * len(topologies)
     combo_pbar = tqdm(total=total_combos, desc="Topology experiment", position=0)
+    system_kwargs_map = {sys: get_system_kwargs(config, sys) for sys in systems}
 
     for system_name in systems:
         # Resolve per-system coupling
@@ -97,7 +99,8 @@ def run_network_topology_experiment(config, output_dir="results/topology", n_job
 
                 args_list = [
                     (system_name, topology, N, coupling,
-                     surr_cfg, ts_cfg, seed_base + rep, net_kwargs)
+                     surr_cfg, ts_cfg, seed_base + rep, net_kwargs,
+                     system_kwargs_map.get(system_name, {}))
                     for rep in range(n_reps)
                 ]
 

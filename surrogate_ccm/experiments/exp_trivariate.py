@@ -21,6 +21,7 @@ import pandas as pd
 import seaborn as sns
 
 from ..generators import create_system
+from ._config_helpers import get_system_kwargs
 from ..testing.se_ccm import SECCM
 from ..utils.parallel import parallel_map
 
@@ -89,10 +90,10 @@ def _pub_rcparams():
 def _run_single(args):
     """Run one rep for a (structure, system, method) combination."""
     (structure_name, system_name, method, coupling, T, transient,
-     n_surrogates, seed) = args
+     n_surrogates, seed, sys_kwargs) = args
     try:
         adj = STRUCTURES[structure_name]
-        system = create_system(system_name, adj, coupling)
+        system = create_system(system_name, adj, coupling, **sys_kwargs)
         data = system.generate(T, transient=transient, seed=seed)
 
         if not np.all(np.isfinite(data)):
@@ -153,6 +154,7 @@ def run_trivariate_experiment(config, output_dir="results/trivariate",
 
     # Build args list
     args_list = []
+    sys_kwargs_map = {sys: get_system_kwargs(config, sys) for sys in systems}
     for struct in structures:
         for sys_name in systems:
             coupling = coupling_map.get(sys_name, 0.1)
@@ -162,6 +164,7 @@ def run_trivariate_experiment(config, output_dir="results/trivariate",
                     args_list.append((
                         struct, sys_name, method, coupling,
                         T, transient, n_surrogates, seed,
+                        sys_kwargs_map.get(sys_name, {}),
                     ))
 
     total = len(args_list)
