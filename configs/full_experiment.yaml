@@ -1,5 +1,5 @@
 # ============================================================
-# 完整实验：全系统 × 全方法 × 密集扫描（~3-8 小时，视 n_jobs）
+# 完整实验：全系统 × 全方法 × 全诊断模块（~6-12 小时，视 n_jobs）
 # ============================================================
 # 用途：论文级别的完整实验数据收集
 # 运行：python run_experiments.py --experiment all --config configs/full_experiment.yaml --n-jobs 16
@@ -132,6 +132,59 @@ node_count:
     adaptive_rho: true
     convergence_filter: true
 
+# ── 实验 4c：边密度扫描 ─────────────────────────────────
+edge_density:
+  n_surrogates: 99
+  n_reps: 10
+  surrogates: [iaaft, cycle_phase_A]
+  er_probs: [0.2, 0.3, 0.5, 0.7, 0.9]
+  extra_topos:
+    - [BA, {m: 2}]
+    - [WS, {k: 4, p: 0.3}]
+  systems:
+    logistic:
+      N: 5
+      coupling: 0.3
+      T: 2000
+      sys_kwargs: {}
+    rossler:
+      N: 5
+      coupling: 0.15
+      T: 5000
+      sys_kwargs:
+        dt: 0.05
+    hindmarsh_rose:
+      N: 5
+      coupling: 0.2
+      T: 10000
+      sys_kwargs: {}
+      subsample: 5
+
+# ── 实验 4d：子采样扫描 ─────────────────────────────────
+subsampling:
+  n_surrogates: 99
+  n_reps: 10
+  vary_graph_across_reps: false
+  surrogates: [iaaft, cycle_phase_A]
+  subsample_factors: [1, 2, 5, 10, 20]
+  systems:
+    rossler:
+      N: 5
+      coupling: 0.15
+      T_base: 10000
+      sys_kwargs:
+        dt: 0.05
+    van_der_pol:
+      N: 5
+      coupling: 0.3
+      T_base: 10000
+      sys_kwargs: {}
+    kuramoto:
+      N: 5
+      coupling: 0.5
+      T_base: 10000
+      sys_kwargs: {}
+
 # ── 实验 5：替代方法比较 ─────────────────────────────────
 surrogate_comparison:
   systems: [logistic, lorenz, henon, rossler, hindmarsh_rose, fitzhugh_nagumo, kuramoto]
@@ -200,6 +253,183 @@ trivariate:
     lorenz: 3.0
     henon: 0.05
     rossler: 0.2
+
+# ── 实验 8：SSO 相关性 ──────────────────────────────────
+sso_correlation:
+  n_surrogates: 99
+  n_reps: 10
+  surrogates: [fft, aaft, iaaft, timeshift, random_reorder, cycle_shuffle, twin, phase, small_shuffle, truncated_fourier, cycle_phase_A, cycle_phase_B]
+  systems:
+    logistic:
+      N: 5
+      coupling: 0.3
+      T: 2000
+      sys_kwargs: {}
+    henon:
+      N: 5
+      coupling: 0.3
+      T: 2000
+      sys_kwargs: {}
+    lorenz:
+      N: 5
+      coupling: 0.5
+      T: 2000
+      sys_kwargs:
+        dt: 0.01
+    rossler:
+      N: 5
+      coupling: 0.15
+      T: 5000
+      sys_kwargs:
+        dt: 0.05
+    kuramoto:
+      N: 5
+      coupling: 0.5
+      T: 2000
+      sys_kwargs: {}
+    hindmarsh_rose:
+      N: 5
+      coupling: 0.2
+      T: 10000
+      sys_kwargs:
+        subsample: 5
+    fitzhugh_nagumo:
+      N: 5
+      coupling: 0.3
+      T: 2000
+      sys_kwargs: {}
+    van_der_pol:
+      N: 5
+      coupling: 0.3
+      T: 5000
+      sys_kwargs: {}
+
+# ── 实验 9：Cycle-Phase 系列 ────────────────────────────
+cycle_phase:
+  n_surrogates: 99
+  n_reps: 10
+  N: 5
+  vary_graph_across_reps: false
+  e2_couplings: [0.05, 0.1, 0.15, 0.2, 0.3]
+  e2_T_values: [1000, 2000, 5000, 10000]
+  e2_surrogates: [iaaft, fft, cycle_shuffle, cycle_phase_A, cycle_phase_B]
+
+# ── 实验 10：诊断总表 ───────────────────────────────────
+diagnostic_table:
+  n_surrogates: 99
+  n_reps: 10
+  surrogates: [fft, aaft, iaaft, timeshift, random_reorder, cycle_shuffle, twin, phase, small_shuffle, truncated_fourier, cycle_phase_A, cycle_phase_B]
+  systems:
+    logistic:
+      N: 5
+      coupling: 0.3
+      T: 2000
+      sys_kwargs: {}
+    henon:
+      N: 5
+      coupling: 0.1
+      T: 2000
+      sys_kwargs: {}
+    lorenz:
+      N: 5
+      coupling: 0.5
+      T: 2000
+      sys_kwargs:
+        dt: 0.01
+    rossler:
+      N: 5
+      coupling: 0.15
+      T: 5000
+      sys_kwargs:
+        dt: 0.05
+    kuramoto:
+      N: 5
+      coupling: 0.5
+      T: 2000
+      sys_kwargs: {}
+    van_der_pol:
+      N: 5
+      coupling: 0.3
+      T: 5000
+      sys_kwargs: {}
+    fitzhugh_nagumo:
+      N: 5
+      coupling: 0.3
+      T: 2000
+      sys_kwargs: {}
+    hindmarsh_rose:
+      N: 5
+      coupling: 0.2
+      T: 10000
+      sys_kwargs:
+        subsample: 5
+
+# ── 实验 11：机制边界 ───────────────────────────────────
+regime_boundaries:
+  n_surrogates: 99
+  n_reps: 10
+  N: 5
+  vary_graph_across_reps: false
+  surrogates: [iaaft, cycle_phase_A]
+  systems:
+    rossler:
+      couplings: [0.01, 0.03, 0.05, 0.08, 0.1, 0.15, 0.2, 0.3, 0.5]
+      T: 5000
+      sys_kwargs:
+        dt: 0.05
+    kuramoto:
+      couplings: [0.1, 0.2, 0.3, 0.5, 0.8, 1.0, 1.5, 2.0]
+      T: 2000
+      sys_kwargs: {}
+    van_der_pol:
+      couplings: [0.05, 0.1, 0.2, 0.3, 0.5, 0.8, 1.0]
+      T: 5000
+      sys_kwargs: {}
+
+# ── 实验 12：收敛性 ─────────────────────────────────────
+convergence:
+  n_surrogates: 99
+  n_reps: 10
+  N: 5
+  vary_graph_across_reps: false
+  surrogates: [iaaft, cycle_phase_A]
+  systems:
+    rossler:
+      coupling: 0.15
+      T_values: [500, 1000, 2000, 5000, 10000]
+      sys_kwargs:
+        dt: 0.05
+    kuramoto:
+      coupling: 0.5
+      T_values: [500, 1000, 2000, 5000, 10000]
+      sys_kwargs: {}
+    van_der_pol:
+      coupling: 0.3
+      T_values: [500, 1000, 2000, 5000, 10000]
+      sys_kwargs: {}
+
+# ── 实验 13：噪声稳健性诊断 ─────────────────────────────
+noise_robustness:
+  n_surrogates: 99
+  n_reps: 10
+  N: 5
+  vary_graph_across_reps: false
+  surrogates: [iaaft, cycle_phase_A]
+  noise_levels: [0.0, 0.05, 0.1, 0.2, 0.3, 0.5]
+  systems:
+    van_der_pol:
+      coupling: 0.3
+      T: 5000
+      sys_kwargs: {}
+    kuramoto:
+      coupling: 0.5
+      T: 2000
+      sys_kwargs: {}
+    rossler:
+      coupling: 0.15
+      T: 5000
+      sys_kwargs:
+        dt: 0.05
 
 n_jobs: 20
 output_dir: results/full

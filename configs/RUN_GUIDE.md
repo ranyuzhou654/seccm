@@ -27,6 +27,8 @@ python run_experiments.py --experiment all \
 - `coupling`
 - `noise`
 - `topology`
+- `edge_density`
+- `subsampling`
 - `surrogate`
 - `robustness`
 - `trivariate`
@@ -41,8 +43,8 @@ python run_experiments.py --experiment all \
 
 注意：
 
-- `all` 会按上面这 14 个实验顺序全部运行。
-- 代码仓库里虽然还有 `edge_density` 和 `subsampling` 模块，但它们目前没有接到 `run_experiments.py` 的 CLI 注册表里，所以 `--experiment all` 现在不会运行它们。
+- `all` 会按上面这 16 个实验顺序全部运行。
+- `full_experiment.yaml` 现在已经为所有已注册实验都提供了显式配置块，不再依赖模块默认参数兜底。
 
 ---
 
@@ -70,6 +72,8 @@ bivariate/
 coupling/
 noise/
 topology/
+edge_density/
+subsampling/
 surrogate/
 robustness/
 trivariate/
@@ -84,8 +88,7 @@ node_count/
 
 ### 当前行为说明
 
-- `full_experiment.yaml` 里已经显式配置了 `bivariate / coupling / noise / topology / node_count / surrogate / robustness / trivariate`。
-- 对于 `sso_correlation / cycle_phase / diagnostic_table / regime_boundaries / convergence / noise_robustness`，如果 `full_experiment.yaml` 没写对应配置块，代码会自动回退到各模块内部默认参数。
+- `full_experiment.yaml` 里现在显式覆盖了所有已注册实验，包括 `edge_density` 和 `subsampling`。
 - `--output-dir` 会覆盖 YAML 里的 `output_dir`。
 - `bivariate` 不使用 `n_jobs`，其他实验会使用 `n_jobs`。
 
@@ -136,6 +139,8 @@ python run_experiments.py --experiment bivariate --config configs/full_experimen
 python run_experiments.py --experiment coupling --config configs/full_experiment.yaml --n-jobs 16 --output-dir results/full_main
 python run_experiments.py --experiment noise --config configs/full_experiment.yaml --n-jobs 16 --output-dir results/full_main
 python run_experiments.py --experiment topology --config configs/full_experiment.yaml --n-jobs 16 --output-dir results/full_main
+python run_experiments.py --experiment edge_density --config configs/full_experiment.yaml --n-jobs 16 --output-dir results/full_main
+python run_experiments.py --experiment subsampling --config configs/full_experiment.yaml --n-jobs 16 --output-dir results/full_main
 python run_experiments.py --experiment node_count --config configs/full_experiment.yaml --n-jobs 16 --output-dir results/full_main
 python run_experiments.py --experiment surrogate --config configs/full_experiment.yaml --n-jobs 16 --output-dir results/full_main
 python run_experiments.py --experiment robustness --config configs/full_experiment.yaml --n-jobs 16 --output-dir results/full_main
@@ -218,6 +223,8 @@ results/full_20260328/
 ├── coupling/
 ├── noise/
 ├── topology/
+├── edge_density/
+├── subsampling/
 ├── surrogate/
 ├── robustness/
 │   ├── T_sweep/
