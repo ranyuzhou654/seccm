@@ -33,9 +33,13 @@ def _find_neighbors_theiler(M, k, theiler_w=0):
     tree = KDTree(M)
 
     if theiler_w <= 0:
-        # Standard: query k+1 and drop self
-        dists, idxs = tree.query(M, k=k + 1)
-        return dists[:, 1:], idxs[:, 1:]
+        # Fast path: use FAISS GPU kNN if available, else KDTree
+        try:
+            from ..utils.knn import knn_query
+            return knn_query(M, k, use_gpu=True)
+        except ImportError:
+            dists, idxs = tree.query(M, k=k + 1)
+            return dists[:, 1:], idxs[:, 1:]
 
     # With Theiler window: query more neighbors, filter out temporally close
     # Query enough extra to compensate for exclusion zone

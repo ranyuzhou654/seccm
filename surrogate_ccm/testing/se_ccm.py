@@ -8,6 +8,7 @@ from ..ccm.embedding import delay_embed, select_parameters
 from ..ccm.network_ccm import compute_pairwise_ccm
 from ..surrogate import generate_surrogate
 from .hypothesis_test import compute_pvalue, compute_zscore, fdr_correction
+from ..utils.backend import gpu_available, get_array_module, to_device, to_numpy
 
 
 def _ccm_predict_rho(M_x, y_aligned, E):
@@ -34,15 +35,33 @@ def _ccm_predict_rho(M_x, y_aligned, E):
     return 0.0 if np.isnan(rho) else float(rho)
 
 
-def _ccm_surrogate_batch(M_x, idxs, w, y_aligned, surrogates, offset, T_eff):
-    """Vectorized surrogate CCM: compute rho for all surrogates at once."""
-    n_surr = surrogates.shape[0]
-    rho_surr = np.empty(n_surr)
-    for s in range(n_surr):
-        y_s = surrogates[s, offset:offset + T_eff]
-        y_pred = np.sum(w * y_s[idxs], axis=1)
-        r = np.corrcoef(y_s, y_pred)[0, 1]
-        rho_surr[s] = 0.0 if np.isnan(r) else r
+def _ccm_surrogate_batch(M_x, idxs, w, y_aligned, surrogates, offset, T_eff,
+                          use_gpu=False):
+    """Vectorized surrogate CCM: compute rho for all surrogates at once.
+
+    Uses batch matrix operations instead of per-surrogate loops.
+    Optionally runs on GPU via CuPy.
+    """
+    xp = get_array_module(use_gpu)
+
+    surr_sliced = xp.asarray(surrogates[:, offset:offset + T_eff])  # (n_surr, T_eff)
+    idxs_d = xp.asarray(idxs)   # (L, k)
+    w_d = xp.asarray(w)         # (L, k)
+
+    # Gather neighbor values for all surrogates: (n_surr, L, k)
+    y_neighbors = surr_sliced[:, idxs_d]
+    # Weighted prediction: (n_surr, L)
+    y_pred = xp.sum(w_d[None, :, :] * y_neighbors, axis=2)
+
+    # Batch Pearson correlation (manual formula avoids per-surrogate np.corrcoef)
+    y_s_c = surr_sliced - surr_sliced.mean(axis=1, keepdims=True)
+    y_p_c = y_pred - y_pred.mean(axis=1, keepdims=True)
+    num = xp.sum(y_s_c * y_p_c, axis=1)
+    den = xp.sqrt(xp.sum(y_s_c ** 2, axis=1) * xp.sum(y_p_c ** 2, axis=1))
+    rho_surr = num / (den + 1e-12)
+
+    rho_surr = to_numpy(rho_surr)
+    rho_surr = np.nan_to_num(rho_surr, nan=0.0)
     return rho_surr
 
 
@@ -63,6 +82,8 @@ class SECCM:
         Random seed.
     iaaft_max_iter : int
         Max iterations for iAAFT.
+    use_gpu : bool or "auto"
+        GPU acceleration via CuPy. "auto" detects availability at fit time.
     """
 
     def __init__(
@@ -81,6 +102,7 @@ class SECCM:
         E_method="simplex",
         convergence_filter=True,
         convergence_threshold=0.0,
+        use_gpu="auto",
     ):
         self.surrogate_method = surrogate_method
         self.n_surrogates = n_surrogates
@@ -96,6 +118,7 @@ class SECCM:
         self.E_method = E_method
         self.convergence_filter = convergence_filter
         self.convergence_threshold = convergence_threshold
+        self.use_gpu = use_gpu
 
         # Warn if n_surrogates is too low for the chosen alpha
         import math
@@ -132,6 +155,12 @@ class SECCM:
         """
         N = data.shape[1]
         n_pairs = N * (N - 1)
+
+        # Resolve use_gpu
+        _use_gpu = self.use_gpu
+        if _use_gpu == "auto":
+            _use_gpu = gpu_available()
+        self.use_gpu_resolved_ = _use_gpu
 
         # Step 1: Select embedding parameters per node
         param_iter = range(N)
@@ -227,6 +256,7 @@ class SECCM:
                 method=method_j,
                 n_surrogates=self.n_surrogates,
                 seed=seed_j,
+                use_gpu=_use_gpu,
                 **kw,
             )
         self.surrogate_methods_used_ = surr_methods_used
@@ -243,6 +273,7 @@ class SECCM:
                 M_x, idxs, w,
                 data[offset:offset + T_eff, j],
                 surrogates_j, offset, T_eff,
+                use_gpu=_use_gpu,
             )
 
             pvalue_matrix[i, j] = compute_pvalue(rho_obs, rho_surr)

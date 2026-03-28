@@ -38,7 +38,8 @@ SURROGATE_METHODS = {
 }
 
 
-def generate_surrogate(x, method="iaaft", n_surrogates=100, seed=None, **kwargs):
+def generate_surrogate(x, method="iaaft", n_surrogates=100, seed=None,
+                       use_gpu=False, **kwargs):
     """Generate multiple surrogate time series.
 
     Parameters
@@ -53,6 +54,8 @@ def generate_surrogate(x, method="iaaft", n_surrogates=100, seed=None, **kwargs)
         Number of surrogates to generate.
     seed : int, optional
         Base random seed.
+    use_gpu : bool
+        If True and CuPy available, use GPU acceleration for batch methods.
     **kwargs
         Additional keyword arguments passed to the surrogate function.
 
@@ -61,6 +64,19 @@ def generate_surrogate(x, method="iaaft", n_surrogates=100, seed=None, **kwargs)
     surrogates : ndarray, shape (n_surrogates, T)
         Array of surrogate time series.
     """
+    # Fast path: batch iAAFT on GPU (batch FFT + argsort are well-parallelized)
+    # On CPU, sequential with per-surrogate early-exit is faster.
+    if method.lower() == "iaaft" and use_gpu:
+        from .iaaft_surrogate import iaaft_surrogate_batch
+        rng = np.random.default_rng(seed)
+        batch_kwargs = {
+            k: v for k, v in kwargs.items()
+            if k in ("max_iter", "tol")
+        }
+        return iaaft_surrogate_batch(
+            x, n_surrogates, rng=rng, use_gpu=use_gpu, **batch_kwargs,
+        )
+
     func = SURROGATE_METHODS.get(method.lower())
     if func is None:
         raise ValueError(
