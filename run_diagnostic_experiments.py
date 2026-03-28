@@ -28,6 +28,8 @@ from surrogate_ccm.experiments import (
     run_regime_boundary_experiment,
     run_convergence_experiment,
     run_noise_robustness_experiment,
+    run_edge_density_experiment,
+    run_subsampling_experiment,
 )
 
 
@@ -67,6 +69,16 @@ def build_config(args):
             "N": 5,
             "seed": 42,
         },
+        "edge_density": {
+            "n_surrogates": n_surrogates,
+            "n_reps": n_reps,
+            "seed": 42,
+        },
+        "subsampling": {
+            "n_surrogates": n_surrogates,
+            "n_reps": n_reps,
+            "seed": 42,
+        },
     }
 
     if args.feasibility:
@@ -100,20 +112,36 @@ def build_config(args):
         }
         config["noise_robustness"]["noise_levels"] = [0.0, 0.1, 0.3]
 
+        config["edge_density"]["systems"] = {
+            "logistic": {"N": 5, "coupling": 0.3, "T": 2000, "sys_kwargs": {}},
+            "rossler":  {"N": 5, "coupling": 0.15, "T": 5000,
+                         "sys_kwargs": {"dt": 0.05}},
+        }
+        config["edge_density"]["er_probs"] = [0.2, 0.5, 0.9]
+        config["edge_density"]["extra_topos"] = [("BA", {"m": 2})]
+
+        config["subsampling"]["systems"] = {
+            "van_der_pol": {"N": 5, "coupling": 0.3, "T_base": 5000,
+                            "sys_kwargs": {}},
+        }
+        config["subsampling"]["subsample_factors"] = [1, 5, 20]
+
     return config
 
 
 EXPERIMENTS = {
-    "D1": ("diagnostic_table",  run_diagnostic_table_experiment),
-    "D2": ("regime_boundaries", run_regime_boundary_experiment),
-    "E5": ("convergence",       run_convergence_experiment),
-    "E7": ("noise_robustness",  run_noise_robustness_experiment),
+    "D1":     ("diagnostic_table",  run_diagnostic_table_experiment),
+    "D2":     ("regime_boundaries", run_regime_boundary_experiment),
+    "E5":     ("convergence",       run_convergence_experiment),
+    "E7":     ("noise_robustness",  run_noise_robustness_experiment),
+    "E_edge": ("edge_density",      run_edge_density_experiment),
+    "E_sub":  ("subsampling",       run_subsampling_experiment),
 }
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Run diagnostic framework experiments (D1, D2, E5, E7)"
+        description="Run diagnostic framework experiments (D1, D2, E5, E7, E_edge, E_sub)"
     )
     parser.add_argument(
         "--only", nargs="+", choices=list(EXPERIMENTS.keys()),

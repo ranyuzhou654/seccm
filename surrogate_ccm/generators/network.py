@@ -22,6 +22,7 @@ def generate_network(topology, N, seed=None, **kwargs):
         Topology-specific parameters:
         - ER: p (edge probability, default 0.3)
         - WS: k (nearest neighbors, default 4), p (rewiring prob, default 0.3)
+        - BA: m (edges per new node, default 2)
         - ring: k (nearest neighbors per side, default 1)
 
     Returns
@@ -42,6 +43,18 @@ def generate_network(topology, N, seed=None, **kwargs):
         p = kwargs.get("p", kwargs.get("ws_p", 0.3))
         G_undirected = nx.watts_strogatz_graph(N, k, p, seed=seed)
         # Randomly orient each undirected edge to avoid full reciprocity
+        G = nx.DiGraph()
+        G.add_nodes_from(range(N))
+        for u, v in G_undirected.edges():
+            if rng.random() < 0.5:
+                G.add_edge(u, v)
+            else:
+                G.add_edge(v, u)
+
+    elif topology == "BA":
+        m = kwargs.get("m", kwargs.get("ba_m", 2))
+        G_undirected = nx.barabasi_albert_graph(N, m, seed=seed)
+        # Randomly orient each undirected edge (same pattern as WS)
         G = nx.DiGraph()
         G.add_nodes_from(range(N))
         for u, v in G_undirected.edges():

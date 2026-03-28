@@ -307,9 +307,10 @@ def _classify_regimes(agg, output_dir):
         delta     = row.get("AUC_ROC_delta_zscore", np.nan)
         raw_auroc = row.get("AUC_ROC_rho", np.nan)
 
-        if conv < 0.5:
-            regime = "ccm_unreliable"
-        elif overlap < 0.02 and delta < 0:
+        # Note: convergence (frac_converging) is NOT used as a filter
+        # because low convergence at a given T does not imply CCM failure —
+        # it may simply mean the time series is too short.
+        if overlap < 0.02 and delta < 0:
             regime = "surrogate_impermeable"
         elif delta > 0.02:
             regime = "surrogate_helps"
@@ -325,6 +326,7 @@ def _classify_regimes(agg, output_dir):
             "delta_auroc": delta,
             "rho_gap": rho_gap,
             "null_overlap": overlap,
+            "raw_auroc": raw_auroc,
             "frac_converging": conv,
         })
 

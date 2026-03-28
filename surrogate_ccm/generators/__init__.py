@@ -21,6 +21,13 @@ SYSTEM_CLASSES = {
     "van_der_pol": VanDerPolNetwork,
 }
 
+# Register dysts-based systems (if dysts is installed)
+try:
+    from .dysts_system import DYSTS_SYSTEM_CLASSES
+    SYSTEM_CLASSES.update(DYSTS_SYSTEM_CLASSES)
+except ImportError:
+    pass
+
 
 def create_system(system_name, adj, coupling, **kwargs):
     """Factory to create a system generator by name."""

@@ -13,3 +13,5 @@ from .exp_diagnostic_table import run_diagnostic_table_experiment
 from .exp_regime_boundaries import run_regime_boundary_experiment
 from .exp_convergence import run_convergence_experiment
 from .exp_noise_robustness import run_noise_robustness_experiment
+from .exp_edge_density import run_edge_density_experiment
+from .exp_subsampling import run_subsampling_experiment
