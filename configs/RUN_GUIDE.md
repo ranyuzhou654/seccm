@@ -66,6 +66,12 @@ python run_experiments.py --experiment robustness --config configs/adaptive_abla
 python run_experiments.py --experiment node_count --config configs/default.yaml
 ```
 
+默认 `node_count` 会在同一个 `N` 上复用同一张随机图，仅重复数据初值和 surrogate 随机性，以减少与节点数量主效应无关的方差。
+如果你想把图结构波动也纳入误差条，把 `vary_graph_across_reps` 改成 `true`。
+
+`coupling_strength`、`noise`、`network_topology` 现在也采用同样的默认策略：固定同一点上的图结构，只重复数据/ surrogate 随机性。
+另外这些 sweep 图里的阴影或误差条现在显示的是 `SEM`，不再是 `std`，因此更接近“均值估计的不确定性”。
+
 ### 8. 完整实验（论文数据）
 
 ```bash

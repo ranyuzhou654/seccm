@@ -143,11 +143,28 @@ def plot_performance_curves(
     colors = plt.cm.Set1(np.linspace(0, 1, len(metrics_dict)))
 
     for (name, values), color in zip(metrics_dict.items(), colors):
-        values = np.asarray(values)
+        values = np.asarray(values, dtype=object)
+        if values.ndim == 1 and len(values) > 0 and not np.isscalar(values[0]):
+            max_reps = max(len(np.asarray(row).ravel()) for row in values)
+            padded = np.full((len(values), max_reps), np.nan, dtype=float)
+            for i, row in enumerate(values):
+                row_arr = np.asarray(row, dtype=float).ravel()
+                padded[i, :len(row_arr)] = row_arr
+            values = padded
+        else:
+            values = np.asarray(values, dtype=float)
+
         if values.ndim == 2:
-            mean = values.mean(axis=1)
-            std = values.std(axis=1)
-            ax.fill_between(x_values, mean - std, mean + std, alpha=0.2, color=color)
+            mean = np.nanmean(values, axis=1)
+            counts = np.sum(np.isfinite(values), axis=1)
+            std = np.nanstd(values, axis=1, ddof=1)
+            sem = np.divide(
+                std,
+                np.sqrt(np.maximum(counts, 1)),
+                out=np.zeros_like(std),
+                where=counts > 1,
+            )
+            ax.fill_between(x_values, mean - sem, mean + sem, alpha=0.2, color=color)
             ax.plot(x_values, mean, "-o", color=color, label=name, markersize=5)
         else:
             ax.plot(x_values, values, "-o", color=color, label=name, markersize=5)

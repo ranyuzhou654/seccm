@@ -17,7 +17,7 @@ import pandas as pd
 from ..generators import SYSTEM_CLASSES, create_system, generate_network
 from ..testing.se_ccm import SECCM
 from ..utils.parallel import parallel_map
-from ._config_helpers import collect_seccm_kwargs, get_system_kwargs
+from ._config_helpers import collect_seccm_kwargs, get_system_kwargs, stable_seed
 
 
 DEFAULT_SYSTEMS = ["logistic", "lorenz", "henon"]
@@ -48,12 +48,13 @@ def _resolve_topology_kwargs(topology, cfg, N):
 def _worker(args):
     """Worker: one system × N × surrogate × replicate."""
     (system_name, N, topology, topo_kwargs, coupling, T, transient,
-     surr_method, n_surrogates, seed, fdr, sys_kwargs, extra_seccm_kwargs) = args
+     surr_method, n_surrogates, graph_seed, data_seed, seccm_seed,
+     rep, fdr, sys_kwargs, extra_seccm_kwargs) = args
 
     try:
-        adj = generate_network(topology, N, seed=seed, **topo_kwargs)
+        adj = generate_network(topology, N, seed=graph_seed, **topo_kwargs)
         system = create_system(system_name, adj, coupling, **sys_kwargs)
-        data = system.generate(T, transient=transient, seed=seed)
+        data = system.generate(T, transient=transient, seed=data_seed)
 
         fit_start = time.perf_counter()
         seccm = SECCM(
@@ -61,7 +62,7 @@ def _worker(args):
             n_surrogates=n_surrogates,
             alpha=0.05,
             fdr=fdr,
-            seed=seed,
+            seed=seccm_seed,
             verbose=False,
             **extra_seccm_kwargs,
         )
@@ -79,7 +80,10 @@ def _worker(args):
             "N": N,
             "topology": topology,
             "surrogate": surr_method,
-            "seed": seed,
+            "rep": rep,
+            "graph_seed": graph_seed,
+            "data_seed": data_seed,
+            "seccm_seed": seccm_seed,
             "n_edges": n_edges,
             "edge_density": edge_density,
             "fit_time_sec": fit_time_sec,
@@ -96,7 +100,10 @@ def _worker(args):
             "N": N,
             "topology": topology,
             "surrogate": surr_method,
-            "seed": seed,
+            "rep": rep,
+            "graph_seed": graph_seed,
+            "data_seed": data_seed,
+            "seccm_seed": seccm_seed,
             "error": str(e),
         }
 
@@ -117,6 +124,7 @@ def run_node_count_experiment(config, output_dir="results/node_count", n_jobs=-1
     n_reps = cfg.get("n_reps", 10)
     fdr = cfg.get("fdr", False)
     base_seed = cfg.get("seed", config.get("seed", 42))
+    vary_graph_across_reps = cfg.get("vary_graph_across_reps", False)
 
     seccm_cfg = cfg.get("seccm_kwargs", {})
     extra_seccm_kwargs = collect_seccm_kwargs(seccm_cfg)
@@ -134,14 +142,26 @@ def run_node_count_experiment(config, output_dir="results/node_count", n_jobs=-1
 
         for N in N_values:
             topo_kwargs = _resolve_topology_kwargs(topology, cfg, N)
+            fixed_graph_seed = stable_seed(
+                base_seed, "node_count", "graph", system_name, N, topology,
+            )
             for surr in surrogates:
                 for rep in range(n_reps):
-                    seed = base_seed + hash(
-                        ("e_node", system_name, N, topology, surr, rep)
-                    ) % (2**31)
+                    graph_seed = fixed_graph_seed
+                    if vary_graph_across_reps:
+                        graph_seed = stable_seed(
+                            base_seed, "node_count", "graph", system_name, N, topology, rep,
+                        )
+                    data_seed = stable_seed(
+                        base_seed, "node_count", "data", system_name, N, topology, rep,
+                    )
+                    seccm_seed = stable_seed(
+                        base_seed, "node_count", "seccm", system_name, N, topology, surr, rep,
+                    )
                     args_list.append((
                         system_name, N, topology, topo_kwargs, coupling, T, transient,
-                        surr, n_surrogates, seed, fdr, sys_kwargs, extra_seccm_kwargs,
+                        surr, n_surrogates, graph_seed, data_seed, seccm_seed,
+                        rep, fdr, sys_kwargs, extra_seccm_kwargs,
                     ))
 
     n_total = len(args_list)
@@ -167,18 +187,25 @@ def run_node_count_experiment(config, output_dir="results/node_count", n_jobs=-1
 
     agg = df.groupby(["system", "N", "surrogate"]).agg(
         edge_density_mean=("edge_density", "mean"),
+        edge_density_std=("edge_density", "std"),
         n_edges_mean=("n_edges", "mean"),
         fit_time_sec_mean=("fit_time_sec", "mean"),
         fit_time_sec_std=("fit_time_sec", "std"),
+        fit_time_sec_sem=("fit_time_sec", "sem"),
         AUC_ROC_rho_mean=("AUC_ROC_rho", "mean"),
         AUC_ROC_rho_std=("AUC_ROC_rho", "std"),
+        AUC_ROC_rho_sem=("AUC_ROC_rho", "sem"),
         AUC_ROC_zscore_mean=("AUC_ROC_zscore", "mean"),
         AUC_ROC_zscore_std=("AUC_ROC_zscore", "std"),
+        AUC_ROC_zscore_sem=("AUC_ROC_zscore", "sem"),
         delta_auroc_mean=("AUC_ROC_delta_zscore", "mean"),
         delta_auroc_std=("AUC_ROC_delta_zscore", "std"),
+        delta_auroc_sem=("AUC_ROC_delta_zscore", "sem"),
         TPR_mean=("TPR", "mean"),
+        TPR_sem=("TPR", "sem"),
         FPR_mean=("FPR", "mean"),
-        count=("seed", "count"),
+        FPR_sem=("FPR", "sem"),
+        count=("rep", "count"),
     ).reset_index()
     agg.to_csv(os.path.join(output_dir, "node_count_agg.csv"), index=False)
     print(f"  Saved {len(df)} raw rows, {len(agg)} aggregated rows")
@@ -208,9 +235,9 @@ def _plot_node_count(df, output_dir):
             sub = df[(df["system"] == sys_name) & (df["surrogate"] == surr)]
             if len(sub) == 0:
                 continue
-            agg = sub.groupby("N")["AUC_ROC_zscore"].agg(["mean", "std"])
+            agg = sub.groupby("N")["AUC_ROC_zscore"].agg(["mean", "sem"])
             color = surr_colors.get(surr, "#7f8c8d")
-            ax.errorbar(agg.index, agg["mean"], yerr=agg["std"],
+            ax.errorbar(agg.index, agg["mean"], yerr=agg["sem"],
                         marker="o", label=f"z-score ({surr})",
                         color=color, capsize=3, linewidth=1.5)
 
@@ -243,9 +270,9 @@ def _plot_node_count(df, output_dir):
             sub = df[(df["system"] == sys_name) & (df["surrogate"] == surr)]
             if len(sub) == 0:
                 continue
-            agg = sub.groupby("N")["AUC_ROC_delta_zscore"].agg(["mean", "std"])
+            agg = sub.groupby("N")["AUC_ROC_delta_zscore"].agg(["mean", "sem"])
             color = surr_colors.get(surr, "#7f8c8d")
-            ax.errorbar(agg.index, agg["mean"], yerr=agg["std"],
+            ax.errorbar(agg.index, agg["mean"], yerr=agg["sem"],
                         marker="o", color=color, capsize=3, linewidth=1.5,
                         label=surr)
 
@@ -273,9 +300,9 @@ def _plot_node_count(df, output_dir):
             sub = df[(df["system"] == sys_name) & (df["surrogate"] == surr)]
             if len(sub) == 0:
                 continue
-            agg = sub.groupby("N")["fit_time_sec"].agg(["mean", "std"])
+            agg = sub.groupby("N")["fit_time_sec"].agg(["mean", "sem"])
             color = surr_colors.get(surr, "#7f8c8d")
-            ax.errorbar(agg.index, agg["mean"], yerr=agg["std"],
+            ax.errorbar(agg.index, agg["mean"], yerr=agg["sem"],
                         marker="o", color=color, capsize=3, linewidth=1.5,
                         label=surr)
 

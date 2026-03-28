@@ -16,6 +16,7 @@ import pandas as pd
 from ..generators import SYSTEM_CLASSES, create_system, generate_network
 from ..testing.se_ccm import SECCM
 from ..utils.parallel import parallel_map
+from ._config_helpers import collect_seccm_kwargs, stable_seed
 
 
 DEFAULT_SYSTEMS = {
@@ -32,19 +33,20 @@ DEFAULT_SURROGATES = ["iaaft", "cycle_phase_A"]
 
 def _worker(args):
     """Worker: one system × T × surrogate × replicate."""
-    (system_name, coupling, T, surr_method, n_surrogates,
-     N, seed, sys_kwargs) = args
+    (system_name, coupling, T, surr_method, n_surrogates, N, rep, graph_seed,
+     data_seed, seccm_seed, sys_kwargs, extra_seccm_kwargs) = args
 
     try:
-        adj = generate_network("ER", N, seed=seed, p=0.5)
+        adj = generate_network("ER", N, seed=graph_seed, p=0.5)
         system = create_system(system_name, adj, coupling, **sys_kwargs)
-        data = system.generate(T, transient=1000, seed=seed)
+        data = system.generate(T, transient=1000, seed=data_seed)
 
         seccm = SECCM(
             surrogate_method=surr_method,
             n_surrogates=n_surrogates,
             alpha=0.05, fdr=True,
-            seed=seed, verbose=False,
+            seed=seccm_seed, verbose=False,
+            **extra_seccm_kwargs,
         )
         seccm.fit(data)
         metrics = seccm.score(adj)
@@ -54,7 +56,10 @@ def _worker(args):
             "coupling": coupling,
             "T": T,
             "surrogate": surr_method,
-            "seed": seed,
+            "rep": rep,
+            "graph_seed": graph_seed,
+            "data_seed": data_seed,
+            "seccm_seed": seccm_seed,
             "AUC_ROC_rho":          metrics.get("AUC_ROC_rho", np.nan),
             "AUC_ROC_zscore":       metrics.get("AUC_ROC_zscore", np.nan),
             "AUC_ROC_delta_zscore": metrics.get("AUC_ROC_delta_zscore", np.nan),
@@ -80,7 +85,11 @@ def _worker(args):
         return {
             "system": system_name, "coupling": coupling,
             "T": T, "surrogate": surr_method,
-            "seed": seed, "error": str(e),
+            "rep": rep,
+            "graph_seed": graph_seed,
+            "data_seed": data_seed,
+            "seccm_seed": seccm_seed,
+            "error": str(e),
         }
 
 
@@ -93,9 +102,13 @@ def run_convergence_experiment(config, output_dir="results/convergence",
     n_surrogates = cfg.get("n_surrogates", 100)
     n_reps       = cfg.get("n_reps", 10)
     N            = cfg.get("N", 5)
-    base_seed    = cfg.get("seed", 42)
+    base_seed    = cfg.get("seed", config.get("seed", 42))
     system_cfgs  = cfg.get("systems", DEFAULT_SYSTEMS)
     surrogates   = cfg.get("surrogates", DEFAULT_SURROGATES)
+    vary_graph_across_reps = cfg.get("vary_graph_across_reps", False)
+    seccm_cfg = dict(config.get("surrogate", {}))
+    seccm_cfg.update(cfg.get("seccm_kwargs", {}))
+    extra_seccm_kwargs = collect_seccm_kwargs(seccm_cfg)
 
     valid_systems = {k: v for k, v in system_cfgs.items() if k in SYSTEM_CLASSES}
 
@@ -103,15 +116,52 @@ def run_convergence_experiment(config, output_dir="results/convergence",
     for sys_name, scfg in valid_systems.items():
         coupling   = scfg["coupling"]
         sys_kwargs = scfg.get("sys_kwargs", {})
+        fixed_graph_seed = stable_seed(
+            base_seed, "convergence", "graph", sys_name, coupling, N,
+        )
         for T in scfg["T_values"]:
             for surr in surrogates:
                 for rep in range(n_reps):
-                    seed = base_seed + hash(
-                        ("e5", sys_name, T, surr, rep)
-                    ) % (2**31)
                     args_list.append(
-                        (sys_name, coupling, T, surr, n_surrogates,
-                         N, seed, sys_kwargs)
+                        (
+                            sys_name,
+                            coupling,
+                            T,
+                            surr,
+                            n_surrogates,
+                            N,
+                            rep,
+                            stable_seed(
+                                base_seed,
+                                "convergence",
+                                "graph",
+                                sys_name,
+                                coupling,
+                                N,
+                                rep,
+                            ) if vary_graph_across_reps else fixed_graph_seed,
+                            stable_seed(
+                                base_seed,
+                                "convergence",
+                                "data",
+                                sys_name,
+                                coupling,
+                                N,
+                                rep,
+                            ),
+                            stable_seed(
+                                base_seed,
+                                "convergence",
+                                "seccm",
+                                sys_name,
+                                coupling,
+                                T,
+                                surr,
+                                rep,
+                            ),
+                            sys_kwargs,
+                            extra_seccm_kwargs,
+                        )
                     )
 
     n_total = len(args_list)
@@ -205,9 +255,9 @@ def _plot_convergence(df, output_dir):
             sub = df[(df["system"] == sys_name) & (df["surrogate"] == surr)]
             if len(sub) == 0:
                 continue
-            agg = sub.groupby("T")["AUC_ROC_zscore"].agg(["mean", "std"])
+            agg = sub.groupby("T")["AUC_ROC_zscore"].agg(["mean", "sem"])
             color = surr_colors.get(surr, "#7f8c8d")
-            ax.errorbar(agg.index, agg["mean"], yerr=agg["std"],
+            ax.errorbar(agg.index, agg["mean"], yerr=agg["sem"],
                         marker="o", label=surr, color=color,
                         capsize=3, linewidth=1.5)
 
@@ -242,9 +292,9 @@ def _plot_convergence(df, output_dir):
             sub = df[(df["system"] == sys_name) & (df["surrogate"] == surr)]
             if len(sub) == 0:
                 continue
-            agg = sub.groupby("T")["AUC_ROC_delta_zscore"].agg(["mean", "std"])
+            agg = sub.groupby("T")["AUC_ROC_delta_zscore"].agg(["mean", "sem"])
             color = surr_colors.get(surr, "#7f8c8d")
-            ax.errorbar(agg.index, agg["mean"], yerr=agg["std"],
+            ax.errorbar(agg.index, agg["mean"], yerr=agg["sem"],
                         marker="o", label=surr, color=color,
                         capsize=3, linewidth=1.5)
 

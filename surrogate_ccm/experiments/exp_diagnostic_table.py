@@ -9,7 +9,6 @@ For every system × surrogate combination, computes:
   - SSO, spectral_conc, acf_decay, perm_entropy
 """
 
-import hashlib
 import json
 import os
 
@@ -27,6 +26,7 @@ from ..surrogate import SURROGATE_METHODS, generate_surrogate
 from ..surrogate.adaptive import spectral_concentration, autocorrelation_decay_time
 from ..testing.se_ccm import SECCM
 from ..utils.parallel import parallel_map
+from ._config_helpers import stable_seed
 
 
 DEFAULT_SYSTEMS = {
@@ -47,25 +47,17 @@ DEFAULT_SURROGATES = [
     "truncated_fourier", "cycle_phase_A", "cycle_phase_B",
 ]
 
-
-def _stable_seed(base_seed, *parts):
-    """Derive a reproducible 31-bit seed from experiment identifiers."""
-    payload = "::".join([str(base_seed), *(str(part) for part in parts)])
-    digest = hashlib.blake2b(payload.encode("utf-8"), digest_size=8).digest()
-    return int.from_bytes(digest[:4], "big") & 0x7FFFFFFF
-
-
 def _build_run_args(valid_systems, valid_surrogates, n_reps, n_surrogates,
                     base_seed):
     """Build paired runs so all surrogates share the same data realization."""
     args_list = []
     for sys_name, sys_cfg in valid_systems.items():
         for rep in range(n_reps):
-            realization_seed = _stable_seed(
+            realization_seed = stable_seed(
                 base_seed, "diagnostic_table", "realization", sys_name, rep,
             )
             for surr in valid_surrogates:
-                analysis_seed = _stable_seed(
+                analysis_seed = stable_seed(
                     base_seed, "diagnostic_table", "analysis",
                     sys_name, surr, rep,
                 )
@@ -417,13 +409,13 @@ def _plot_heatmap(agg, output_dir):
 def _plot_surrogate_ranking(agg, output_dir):
     """Bar chart: mean ΔAUROC per surrogate, averaged across all systems."""
     surr_agg = agg.groupby("surrogate")["AUC_ROC_delta_zscore"].agg(
-        ["mean", "std"]
+        ["mean", "sem"]
     ).sort_values("mean", ascending=False)
 
     fig, ax = plt.subplots(figsize=(12, 5))
     colors = ["#e74c3c" if "cycle_phase" in s else "#3498db"
               for s in surr_agg.index]
-    ax.bar(range(len(surr_agg)), surr_agg["mean"], yerr=surr_agg["std"],
+    ax.bar(range(len(surr_agg)), surr_agg["mean"], yerr=surr_agg["sem"],
            color=colors, alpha=0.85, capsize=4, edgecolor="black", linewidth=0.5)
     ax.set_xticks(range(len(surr_agg)))
     ax.set_xticklabels(surr_agg.index, rotation=45, ha="right", fontsize=10)
@@ -435,7 +427,7 @@ def _plot_surrogate_ranking(agg, output_dir):
 
     # Annotate values
     for i, (_, row) in enumerate(surr_agg.iterrows()):
-        ax.text(i, row["mean"] + row["std"] + 0.005,
+        ax.text(i, row["mean"] + row["sem"] + 0.005,
                 f"{row['mean']:.3f}", ha="center", va="bottom", fontsize=8)
 
     fig.tight_layout()
@@ -471,11 +463,11 @@ def _plot_per_system_bars(df, output_dir):
         ax = axes[idx // n_cols][idx % n_cols]
         sub = df[df["system"] == sys_name]
         agg = sub.groupby("surrogate")["AUC_ROC_delta_zscore"].agg(
-            ["mean", "std"]
+            ["mean", "sem"]
         ).reindex(surrogates)
 
         colors = [palette.get(s, "#3498db") for s in surrogates]
-        ax.bar(range(n_surr), agg["mean"], yerr=agg["std"],
+        ax.bar(range(n_surr), agg["mean"], yerr=agg["sem"],
                color=colors, alpha=0.85, capsize=2,
                edgecolor="black", linewidth=0.4)
         ax.set_xticks(range(n_surr))

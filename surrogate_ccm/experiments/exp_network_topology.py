@@ -9,7 +9,7 @@ import numpy as np
 from tqdm import tqdm
 
 from ..generators import create_system, generate_network
-from ._config_helpers import get_system_kwargs
+from ._config_helpers import collect_seccm_kwargs, get_system_kwargs, stable_seed
 from ..testing.se_ccm import SECCM
 from ..utils.parallel import parallel_map
 from ..visualization.network_plot import plot_performance_curves
@@ -17,24 +17,26 @@ from ..visualization.network_plot import plot_performance_curves
 
 def _run_single_rep(args):
     """Run a single repetition for a given topology and network size."""
-    system_name, topology, N, eps, surr_cfg, ts_cfg, seed, net_kwargs, sys_kwargs = args
+    (system_name, topology, N, eps, surr_cfg, ts_cfg, graph_seed, data_seed,
+     seccm_seed, net_kwargs, sys_kwargs, extra_seccm_kwargs) = args
 
     T = ts_cfg.get("T", 3000)
     transient = ts_cfg.get("transient", 1000)
     n_surrogates = surr_cfg.get("n_surrogates", 100)
 
-    adj = generate_network(topology, N, seed=seed, **net_kwargs)
+    adj = generate_network(topology, N, seed=graph_seed, **net_kwargs)
 
     try:
         system = create_system(system_name, adj, eps, **sys_kwargs)
-        data = system.generate(T, transient=transient, seed=seed)
+        data = system.generate(T, transient=transient, seed=data_seed)
 
         seccm = SECCM(
             surrogate_method="iaaft",
             n_surrogates=n_surrogates,
             alpha=0.05,
-            seed=seed,
+            seed=seccm_seed,
             verbose=False,
+            **extra_seccm_kwargs,
         )
         seccm.fit(data)
         return seccm.score(adj)
@@ -64,7 +66,8 @@ def run_network_topology_experiment(config, output_dir="results/topology", n_job
     N_values = topo_cfg.get("N_values", [10, 20, 30])
     coupling_cfg = topo_cfg.get("coupling", 0.1)
     n_reps = topo_cfg.get("n_reps", 20)
-    seed_base = config.get("seed", 42)
+    base_seed = topo_cfg.get("seed", config.get("seed", 42))
+    vary_graph_across_reps = topo_cfg.get("vary_graph_across_reps", False)
 
     # Default per-system coupling
     default_coupling = {"logistic": 0.1, "lorenz": 1.0, "henon": 0.05}
@@ -74,6 +77,9 @@ def run_network_topology_experiment(config, output_dir="results/topology", n_job
         "ws_k": topo_cfg.get("ws_k", 4),
         "ws_p": topo_cfg.get("ws_p", 0.3),
     }
+    seccm_cfg = dict(surr_cfg)
+    seccm_cfg.update(topo_cfg.get("seccm_kwargs", {}))
+    extra_seccm_kwargs = collect_seccm_kwargs(seccm_cfg)
 
     all_results = {}
     total_combos = len(systems) * len(topologies)
@@ -97,10 +103,50 @@ def run_network_topology_experiment(config, output_dir="results/topology", n_job
             for N in n_pbar:
                 n_pbar.set_description(f"  {topology} N={N}")
 
+                fixed_graph_seed = stable_seed(
+                    base_seed, "network_topology", "graph", system_name, topology, N,
+                )
                 args_list = [
-                    (system_name, topology, N, coupling,
-                     surr_cfg, ts_cfg, seed_base + rep, net_kwargs,
-                     system_kwargs_map.get(system_name, {}))
+                    (
+                        system_name,
+                        topology,
+                        N,
+                        coupling,
+                        surr_cfg,
+                        ts_cfg,
+                        stable_seed(
+                            base_seed,
+                            "network_topology",
+                            "graph",
+                            system_name,
+                            topology,
+                            N,
+                            rep,
+                        ) if vary_graph_across_reps else fixed_graph_seed,
+                        stable_seed(
+                            base_seed,
+                            "network_topology",
+                            "data",
+                            system_name,
+                            topology,
+                            N,
+                            coupling,
+                            rep,
+                        ),
+                        stable_seed(
+                            base_seed,
+                            "network_topology",
+                            "seccm",
+                            system_name,
+                            topology,
+                            N,
+                            coupling,
+                            rep,
+                        ),
+                        net_kwargs,
+                        system_kwargs_map.get(system_name, {}),
+                        extra_seccm_kwargs,
+                    )
                     for rep in range(n_reps)
                 ]
 
@@ -137,9 +183,19 @@ def run_network_topology_experiment(config, output_dir="results/topology", n_job
             key = f"{system_name}_{topology}"
             r = all_results[key]
             tpr_means = [np.mean(t) for t in r["TPR"]]
+            tpr_sems = [
+                (np.std(t, ddof=1) / np.sqrt(len(t))) if len(t) > 1 else 0.0
+                for t in r["TPR"]
+            ]
             fpr_means = [np.mean(f) for f in r["FPR"]]
-            axes[0].plot(N_values, tpr_means, "-o", label=topology)
-            axes[1].plot(N_values, fpr_means, "-o", label=topology)
+            fpr_sems = [
+                (np.std(f, ddof=1) / np.sqrt(len(f))) if len(f) > 1 else 0.0
+                for f in r["FPR"]
+            ]
+            axes[0].errorbar(N_values, tpr_means, yerr=tpr_sems,
+                             fmt="-o", label=topology, capsize=3)
+            axes[1].errorbar(N_values, fpr_means, yerr=fpr_sems,
+                             fmt="-o", label=topology, capsize=3)
 
         axes[0].set_xlabel("Network size N")
         axes[0].set_ylabel("TPR")

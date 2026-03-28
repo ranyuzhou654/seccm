@@ -16,6 +16,7 @@ import pandas as pd
 from ..generators import SYSTEM_CLASSES, create_system, generate_network
 from ..testing.se_ccm import SECCM
 from ..utils.parallel import parallel_map
+from ._config_helpers import collect_seccm_kwargs, stable_seed
 
 
 DEFAULT_SYSTEMS = {
@@ -40,7 +41,8 @@ DEFAULT_EXTRA_TOPOS = [
 def _worker(args):
     """Worker: one system × topology × surrogate × replicate."""
     (system_name, sys_cfg, topology, topo_kwargs, surr_method,
-     n_surrogates, seed) = args
+     n_surrogates, rep, graph_seed, data_seed, seccm_seed,
+     extra_seccm_kwargs) = args
 
     try:
         N = sys_cfg["N"]
@@ -49,9 +51,9 @@ def _worker(args):
         sys_kwargs = sys_cfg.get("sys_kwargs", {})
         subsample = sys_cfg.get("subsample", 1)
 
-        adj = generate_network(topology, N, seed=seed, **topo_kwargs)
+        adj = generate_network(topology, N, seed=graph_seed, **topo_kwargs)
         system = create_system(system_name, adj, coupling, **sys_kwargs)
-        data = system.generate(T, transient=1000, seed=seed)
+        data = system.generate(T, transient=1000, seed=data_seed)
 
         if subsample > 1:
             data = data[::subsample]
@@ -66,7 +68,8 @@ def _worker(args):
             surrogate_method=surr_method,
             n_surrogates=n_surrogates,
             alpha=0.05, fdr=True,
-            seed=seed, verbose=False,
+            seed=seccm_seed, verbose=False,
+            **extra_seccm_kwargs,
         )
         seccm.fit(data)
         metrics = seccm.score(adj)
@@ -90,9 +93,14 @@ def _worker(args):
             "system": system_name,
             "topology": topology,
             "topo_param": str(topo_kwargs),
+            "target_density": float(topo_kwargs.get("p", -1.0))
+                               if topology == "ER" else -1.0,
             "edge_density": edge_density,
             "surrogate": surr_method,
-            "seed": seed,
+            "rep": rep,
+            "graph_seed": graph_seed,
+            "data_seed": data_seed,
+            "seccm_seed": seccm_seed,
             "AUC_ROC_rho":          metrics.get("AUC_ROC_rho", np.nan),
             "AUC_ROC_zscore":       metrics.get("AUC_ROC_zscore", np.nan),
             "AUC_ROC_delta_zscore": metrics.get("AUC_ROC_delta_zscore", np.nan),
@@ -105,7 +113,13 @@ def _worker(args):
         return {
             "system": system_name, "topology": topology,
             "topo_param": str(topo_kwargs),
-            "surrogate": surr_method, "seed": seed,
+            "target_density": float(topo_kwargs.get("p", -1.0))
+                               if topology == "ER" else -1.0,
+            "surrogate": surr_method,
+            "rep": rep,
+            "graph_seed": graph_seed,
+            "data_seed": data_seed,
+            "seccm_seed": seccm_seed,
             "error": str(e),
         }
 
@@ -118,11 +132,14 @@ def run_edge_density_experiment(config, output_dir="results/edge_density",
     cfg = config.get("edge_density", {})
     n_surrogates = cfg.get("n_surrogates", 100)
     n_reps       = cfg.get("n_reps", 10)
-    base_seed    = cfg.get("seed", 42)
+    base_seed    = cfg.get("seed", config.get("seed", 42))
     system_cfgs  = cfg.get("systems", DEFAULT_SYSTEMS)
     surrogates   = cfg.get("surrogates", DEFAULT_SURROGATES)
     er_probs     = cfg.get("er_probs", DEFAULT_ER_PROBS)
     extra_topos  = cfg.get("extra_topos", DEFAULT_EXTRA_TOPOS)
+    seccm_cfg = dict(config.get("surrogate", {}))
+    seccm_cfg.update(cfg.get("seccm_kwargs", {}))
+    extra_seccm_kwargs = collect_seccm_kwargs(seccm_cfg)
 
     valid_systems = {k: v for k, v in system_cfgs.items() if k in SYSTEM_CLASSES}
 
@@ -132,24 +149,90 @@ def run_edge_density_experiment(config, output_dir="results/edge_density",
         for p in er_probs:
             for surr in surrogates:
                 for rep in range(n_reps):
-                    seed = base_seed + hash(
-                        ("e_edge", sys_name, "ER", p, surr, rep)
-                    ) % (2**31)
                     args_list.append(
-                        (sys_name, scfg, "ER", {"p": p}, surr,
-                         n_surrogates, seed)
+                        (
+                            sys_name,
+                            scfg,
+                            "ER",
+                            {"p": p},
+                            surr,
+                            n_surrogates,
+                            rep,
+                            stable_seed(
+                                base_seed,
+                                "edge_density",
+                                "graph",
+                                sys_name,
+                                "ER",
+                                p,
+                                rep,
+                            ),
+                            stable_seed(
+                                base_seed,
+                                "edge_density",
+                                "data",
+                                sys_name,
+                                "ER",
+                                p,
+                                rep,
+                            ),
+                            stable_seed(
+                                base_seed,
+                                "edge_density",
+                                "seccm",
+                                sys_name,
+                                "ER",
+                                p,
+                                surr,
+                                rep,
+                            ),
+                            extra_seccm_kwargs,
+                        )
                     )
 
         # Extra topologies
         for topo_name, topo_kw in extra_topos:
             for surr in surrogates:
                 for rep in range(n_reps):
-                    seed = base_seed + hash(
-                        ("e_edge", sys_name, topo_name, str(topo_kw), surr, rep)
-                    ) % (2**31)
                     args_list.append(
-                        (sys_name, scfg, topo_name, topo_kw, surr,
-                         n_surrogates, seed)
+                        (
+                            sys_name,
+                            scfg,
+                            topo_name,
+                            topo_kw,
+                            surr,
+                            n_surrogates,
+                            rep,
+                            stable_seed(
+                                base_seed,
+                                "edge_density",
+                                "graph",
+                                sys_name,
+                                topo_name,
+                                str(topo_kw),
+                                rep,
+                            ),
+                            stable_seed(
+                                base_seed,
+                                "edge_density",
+                                "data",
+                                sys_name,
+                                topo_name,
+                                str(topo_kw),
+                                rep,
+                            ),
+                            stable_seed(
+                                base_seed,
+                                "edge_density",
+                                "seccm",
+                                sys_name,
+                                topo_name,
+                                str(topo_kw),
+                                surr,
+                                rep,
+                            ),
+                            extra_seccm_kwargs,
+                        )
                     )
 
     n_total = len(args_list)
@@ -174,17 +257,24 @@ def run_edge_density_experiment(config, output_dir="results/edge_density",
         return df
 
     # Aggregation
-    agg = df.groupby(["system", "topology", "topo_param", "surrogate"]).agg(
+    agg = df.groupby(
+        ["system", "topology", "topo_param", "target_density", "surrogate"]
+    ).agg(
         edge_density_mean=("edge_density", "mean"),
+        edge_density_std=("edge_density", "std"),
+        edge_density_sem=("edge_density", "sem"),
         AUC_ROC_rho_mean=("AUC_ROC_rho", "mean"),
         AUC_ROC_rho_std=("AUC_ROC_rho", "std"),
+        AUC_ROC_rho_sem=("AUC_ROC_rho", "sem"),
         AUC_ROC_zscore_mean=("AUC_ROC_zscore", "mean"),
         AUC_ROC_zscore_std=("AUC_ROC_zscore", "std"),
+        AUC_ROC_zscore_sem=("AUC_ROC_zscore", "sem"),
         delta_auroc_mean=("AUC_ROC_delta_zscore", "mean"),
         delta_auroc_std=("AUC_ROC_delta_zscore", "std"),
+        delta_auroc_sem=("AUC_ROC_delta_zscore", "sem"),
         rho_gap_mean=("rho_gap", "mean"),
         n_edges_mean=("n_edges", "mean"),
-        count=("seed", "count"),
+        count=("rep", "count"),
     ).reset_index()
     agg.to_csv(os.path.join(output_dir, "edge_density_agg.csv"), index=False)
     print(f"  Saved {len(df)} raw rows, {len(agg)} aggregated rows")
@@ -215,17 +305,24 @@ def _plot_edge_density(df, output_dir):
             sub = df_er[(df_er["system"] == sys_name) & (df_er["surrogate"] == surr)]
             if len(sub) == 0:
                 continue
-            agg = sub.groupby("edge_density")["AUC_ROC_zscore"].agg(["mean", "std"])
+            agg = sub.groupby("target_density").agg(
+                edge_density_x=("edge_density", "mean"),
+                auc_mean=("AUC_ROC_zscore", "mean"),
+                auc_sem=("AUC_ROC_zscore", "sem"),
+            ).sort_index()
             color = surr_colors.get(surr, "#7f8c8d")
-            ax.errorbar(agg.index, agg["mean"], yerr=agg["std"],
+            ax.errorbar(agg["edge_density_x"], agg["auc_mean"], yerr=agg["auc_sem"],
                         marker="o", label=f"z-score ({surr})", color=color,
                         capsize=3, linewidth=1.5)
 
         # Raw rho AUROC
         sub_any = df_er[df_er["system"] == sys_name]
         if len(sub_any) > 0:
-            agg_raw = sub_any.groupby("edge_density")["AUC_ROC_rho"].mean()
-            ax.plot(agg_raw.index, agg_raw.values, "k--", label="raw ρ",
+            agg_raw = sub_any.groupby("target_density").agg(
+                edge_density_x=("edge_density", "mean"),
+                auc_mean=("AUC_ROC_rho", "mean"),
+            ).sort_index()
+            ax.plot(agg_raw["edge_density_x"], agg_raw["auc_mean"], "k--", label="raw ρ",
                     linewidth=1, alpha=0.7)
 
         # Mark BA and WS points
@@ -269,10 +366,13 @@ def _plot_edge_density(df, output_dir):
             sub = df_er[(df_er["system"] == sys_name) & (df_er["surrogate"] == surr)]
             if len(sub) == 0:
                 continue
-            agg = sub.groupby("edge_density")["AUC_ROC_delta_zscore"].agg(
-                ["mean", "std"])
+            agg = sub.groupby("target_density").agg(
+                edge_density_x=("edge_density", "mean"),
+                delta_mean=("AUC_ROC_delta_zscore", "mean"),
+                delta_sem=("AUC_ROC_delta_zscore", "sem"),
+            ).sort_index()
             color = surr_colors.get(surr, "#7f8c8d")
-            ax.errorbar(agg.index, agg["mean"], yerr=agg["std"],
+            ax.errorbar(agg["edge_density_x"], agg["delta_mean"], yerr=agg["delta_sem"],
                         marker="o", label=surr, color=color,
                         capsize=3, linewidth=1.5)
 

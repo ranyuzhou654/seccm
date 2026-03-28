@@ -8,7 +8,7 @@ import numpy as np
 from tqdm import tqdm
 
 from ..generators import create_system, generate_network
-from ._config_helpers import get_system_kwargs
+from ._config_helpers import collect_seccm_kwargs, get_system_kwargs, stable_seed
 from ..testing.se_ccm import SECCM
 from ..utils.parallel import parallel_map
 from ..visualization.network_plot import plot_performance_curves
@@ -16,24 +16,26 @@ from ..visualization.network_plot import plot_performance_curves
 
 def _run_single_rep(args):
     """Run a single repetition for a given noise level."""
-    system_name, topology, N, eps, noise_std, surr_cfg, ts_cfg, seed, net_kwargs, sys_kwargs = args
+    (system_name, topology, N, eps, noise_std, surr_cfg, ts_cfg, graph_seed,
+     data_seed, seccm_seed, net_kwargs, sys_kwargs, extra_seccm_kwargs) = args
 
     T = ts_cfg.get("T", 3000)
     transient = ts_cfg.get("transient", 1000)
     n_surrogates = surr_cfg.get("n_surrogates", 100)
 
-    adj = generate_network(topology, N, seed=seed, **net_kwargs)
+    adj = generate_network(topology, N, seed=graph_seed, **net_kwargs)
 
     try:
         system = create_system(system_name, adj, eps, **sys_kwargs)
-        data = system.generate(T, transient=transient, seed=seed, noise_std=noise_std)
+        data = system.generate(T, transient=transient, seed=data_seed, noise_std=noise_std)
 
         seccm = SECCM(
             surrogate_method="iaaft",
             n_surrogates=n_surrogates,
             alpha=0.05,
-            seed=seed,
+            seed=seccm_seed,
             verbose=False,
+            **extra_seccm_kwargs,
         )
         seccm.fit(data)
         return seccm.score(adj)
@@ -64,12 +66,16 @@ def run_noise_experiment(config, output_dir="results/noise", n_jobs=-1):
     coupling_cfg = noise_cfg.get("coupling", 0.1)
     noise_levels = noise_cfg.get("noise_levels", [0.0, 0.01, 0.05, 0.1])
     n_reps = noise_cfg.get("n_reps", 20)
-    seed_base = config.get("seed", 42)
+    base_seed = noise_cfg.get("seed", config.get("seed", 42))
+    vary_graph_across_reps = noise_cfg.get("vary_graph_across_reps", False)
 
     # Default per-system coupling
     default_coupling = {"logistic": 0.1, "lorenz": 1.0, "henon": 0.05}
 
     net_kwargs = {"er_p": noise_cfg.get("er_p", 0.3)}
+    seccm_cfg = dict(surr_cfg)
+    seccm_cfg.update(noise_cfg.get("seccm_kwargs", {}))
+    extra_seccm_kwargs = collect_seccm_kwargs(seccm_cfg)
 
     all_results = {}
     total_combos = len(systems) * len(topologies)
@@ -94,10 +100,52 @@ def run_noise_experiment(config, output_dir="results/noise", n_jobs=-1):
             for noise_std in noise_pbar:
                 noise_pbar.set_description(f"  σ={noise_std:.3f}")
 
+                fixed_graph_seed = stable_seed(
+                    base_seed, "noise", "graph", system_name, topology, N,
+                )
                 args_list = [
-                    (system_name, topology, N, coupling, noise_std,
-                     surr_cfg, ts_cfg, seed_base + rep, net_kwargs,
-                     system_kwargs_map.get(system_name, {}))
+                    (
+                        system_name,
+                        topology,
+                        N,
+                        coupling,
+                        noise_std,
+                        surr_cfg,
+                        ts_cfg,
+                        stable_seed(
+                            base_seed,
+                            "noise",
+                            "graph",
+                            system_name,
+                            topology,
+                            N,
+                            rep,
+                        ) if vary_graph_across_reps else fixed_graph_seed,
+                        stable_seed(
+                            base_seed,
+                            "noise",
+                            "data",
+                            system_name,
+                            topology,
+                            N,
+                            coupling,
+                            rep,
+                        ),
+                        stable_seed(
+                            base_seed,
+                            "noise",
+                            "seccm",
+                            system_name,
+                            topology,
+                            N,
+                            coupling,
+                            noise_std,
+                            rep,
+                        ),
+                        net_kwargs,
+                        system_kwargs_map.get(system_name, {}),
+                        extra_seccm_kwargs,
+                    )
                     for rep in range(n_reps)
                 ]
 
@@ -123,8 +171,8 @@ def run_noise_experiment(config, output_dir="results/noise", n_jobs=-1):
             combo_pbar.update(1)
 
             metrics_plot = {
-                "TPR": np.array([np.mean(t) for t in tpr_by_noise]),
-                "FPR": np.array([np.mean(f) for f in fpr_by_noise]),
+                "TPR": tpr_by_noise,
+                "FPR": fpr_by_noise,
             }
             plot_performance_curves(
                 noise_levels,

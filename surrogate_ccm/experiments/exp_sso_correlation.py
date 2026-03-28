@@ -21,6 +21,7 @@ from ..generators import SYSTEM_CLASSES, create_system, generate_network
 from ..surrogate import SURROGATE_METHODS, generate_surrogate
 from ..testing.se_ccm import SECCM
 from ..utils.parallel import parallel_map
+from ._config_helpers import collect_seccm_kwargs, stable_seed
 
 
 # Default system configurations
@@ -45,7 +46,8 @@ DEFAULT_SURROGATES = [
 
 def _run_single_combo(args):
     """Worker: run one system × surrogate combination."""
-    (system_name, sys_cfg, surr_method, n_surrogates, seed) = args
+    (system_name, sys_cfg, surr_method, n_surrogates, rep,
+     realization_seed, analysis_seed, extra_seccm_kwargs) = args
 
     try:
         N = sys_cfg["N"]
@@ -53,9 +55,9 @@ def _run_single_combo(args):
         T = sys_cfg["T"]
         sys_kwargs = sys_cfg.get("sys_kwargs", {})
 
-        adj = generate_network("ER", N, seed=seed, p=0.5)
+        adj = generate_network("ER", N, seed=realization_seed, p=0.5)
         system = create_system(system_name, adj, coupling, **sys_kwargs)
-        data = system.generate(T, transient=1000, seed=seed)
+        data = system.generate(T, transient=1000, seed=realization_seed)
 
         # Run SE-CCM with this surrogate method
         seccm = SECCM(
@@ -63,8 +65,9 @@ def _run_single_combo(args):
             n_surrogates=n_surrogates,
             alpha=0.05,
             fdr=True,
-            seed=seed,
+            seed=analysis_seed,
             verbose=False,
+            **extra_seccm_kwargs,
         )
         seccm.fit(data)
         metrics = seccm.score(adj)
@@ -75,7 +78,7 @@ def _run_single_combo(args):
             surrogates_j = generate_surrogate(
                 data[:, j], method=surr_method,
                 n_surrogates=min(n_surrogates, 50),
-                seed=seed + j + 1000,
+                seed=analysis_seed + j + 1000,
             )
             sso_j = compute_sso(data[:, j], surrogates_j)
             sso_values.append(sso_j)
@@ -84,7 +87,9 @@ def _run_single_combo(args):
         return {
             "system": system_name,
             "surrogate": surr_method,
-            "seed": seed,
+            "rep": rep,
+            "seed": realization_seed,
+            "analysis_seed": analysis_seed,
             "SSO": mean_sso,
             "AUC_ROC_rho": metrics.get("AUC_ROC_rho", np.nan),
             "AUC_ROC_zscore": metrics.get("AUC_ROC_zscore", np.nan),
@@ -98,7 +103,10 @@ def _run_single_combo(args):
     except Exception as e:
         return {
             "system": system_name, "surrogate": surr_method,
-            "seed": seed, "error": str(e),
+            "rep": rep,
+            "seed": realization_seed,
+            "analysis_seed": analysis_seed,
+            "error": str(e),
         }
 
 
@@ -122,7 +130,10 @@ def run_sso_correlation_experiment(config, output_dir="results/sso_correlation",
     n_reps = cfg.get("n_reps", 10)
     systems = cfg.get("systems", DEFAULT_SYSTEMS)
     surrogates = cfg.get("surrogates", DEFAULT_SURROGATES)
-    base_seed = cfg.get("seed", 42)
+    base_seed = cfg.get("seed", config.get("seed", 42))
+    seccm_cfg = dict(config.get("surrogate", {}))
+    seccm_cfg.update(cfg.get("seccm_kwargs", {}))
+    extra_seccm_kwargs = collect_seccm_kwargs(seccm_cfg)
 
     # Build argument list
     args_list = []
@@ -135,9 +146,23 @@ def run_sso_correlation_experiment(config, output_dir="results/sso_correlation",
                 print(f"  Skipping unknown surrogate: {surr_method}")
                 continue
             for rep in range(n_reps):
-                seed = base_seed + hash((sys_name, surr_method, rep)) % (2**31)
+                realization_seed = stable_seed(
+                    base_seed, "sso_correlation", "realization", sys_name, rep,
+                )
+                analysis_seed = stable_seed(
+                    base_seed, "sso_correlation", "analysis", sys_name, surr_method, rep,
+                )
                 args_list.append(
-                    (sys_name, sys_cfg, surr_method, n_surrogates, seed)
+                    (
+                        sys_name,
+                        sys_cfg,
+                        surr_method,
+                        n_surrogates,
+                        rep,
+                        realization_seed,
+                        analysis_seed,
+                        extra_seccm_kwargs,
+                    )
                 )
 
     print(f"  SSO Correlation: {len(args_list)} runs "

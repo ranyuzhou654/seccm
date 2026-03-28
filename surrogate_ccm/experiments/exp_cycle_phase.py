@@ -18,25 +18,27 @@ from tqdm import tqdm
 from ..generators import SYSTEM_CLASSES, create_system, generate_network
 from ..testing.se_ccm import SECCM
 from ..utils.parallel import parallel_map
+from ._config_helpers import collect_seccm_kwargs, stable_seed
 
 
 def _run_single_rep(args):
     """Worker: run one system × surrogate × config replicate."""
-    (system_name, coupling, T, surr_method, n_surrogates,
-     N, seed, sys_kwargs) = args
+    (system_name, coupling, T, surr_method, n_surrogates, N, rep, graph_seed,
+     data_seed, seccm_seed, sys_kwargs, extra_seccm_kwargs) = args
 
     try:
-        adj = generate_network("ER", N, seed=seed, p=0.5)
+        adj = generate_network("ER", N, seed=graph_seed, p=0.5)
         system = create_system(system_name, adj, coupling, **sys_kwargs)
-        data = system.generate(T, transient=1000, seed=seed)
+        data = system.generate(T, transient=1000, seed=data_seed)
 
         seccm = SECCM(
             surrogate_method=surr_method,
             n_surrogates=n_surrogates,
             alpha=0.05,
             fdr=True,
-            seed=seed,
+            seed=seccm_seed,
             verbose=False,
+            **extra_seccm_kwargs,
         )
         seccm.fit(data)
         metrics = seccm.score(adj)
@@ -46,7 +48,10 @@ def _run_single_rep(args):
             "coupling": coupling,
             "T": T,
             "surrogate": surr_method,
-            "seed": seed,
+            "rep": rep,
+            "graph_seed": graph_seed,
+            "data_seed": data_seed,
+            "seccm_seed": seccm_seed,
             "AUC_ROC_rho": metrics.get("AUC_ROC_rho", np.nan),
             "AUC_ROC_zscore": metrics.get("AUC_ROC_zscore", np.nan),
             "AUC_ROC_delta_zscore": metrics.get("AUC_ROC_delta_zscore", np.nan),
@@ -59,7 +64,11 @@ def _run_single_rep(args):
     except Exception as e:
         return {
             "system": system_name, "surrogate": surr_method,
-            "coupling": coupling, "T": T, "seed": seed,
+            "coupling": coupling, "T": T,
+            "rep": rep,
+            "graph_seed": graph_seed,
+            "data_seed": data_seed,
+            "seccm_seed": seccm_seed,
             "error": str(e),
         }
 
@@ -83,7 +92,11 @@ def run_cycle_phase_experiment(config, output_dir="results/cycle_phase",
     n_surrogates = cfg.get("n_surrogates", 200)
     n_reps = cfg.get("n_reps", 20)
     N = cfg.get("N", 5)
-    base_seed = cfg.get("seed", 42)
+    base_seed = cfg.get("seed", config.get("seed", 42))
+    vary_graph_across_reps = cfg.get("vary_graph_across_reps", False)
+    seccm_cfg = dict(config.get("surrogate", {}))
+    seccm_cfg.update(cfg.get("seccm_kwargs", {}))
+    extra_seccm_kwargs = collect_seccm_kwargs(seccm_cfg)
 
     # ---- E2: Rossler sweep ----
     e2_dir = os.path.join(output_dir, "E2_rossler")
@@ -96,14 +109,52 @@ def run_cycle_phase_experiment(config, output_dir="results/cycle_phase",
                              "cycle_phase_A", "cycle_phase_B"])
 
     args_e2 = []
+    fixed_e2_graph_seed = stable_seed(base_seed, "cycle_phase", "e2", "graph", "rossler", N)
     for coupling in e2_couplings:
         for T in e2_T_values:
             for surr in e2_surrogates:
                 for rep in range(n_reps):
-                    seed = base_seed + hash(("e2", coupling, T, surr, rep)) % (2**31)
                     args_e2.append(
-                        ("rossler", coupling, T, surr, n_surrogates,
-                         N, seed, {"dt": 0.05})
+                        (
+                            "rossler",
+                            coupling,
+                            T,
+                            surr,
+                            n_surrogates,
+                            N,
+                            rep,
+                            stable_seed(
+                                base_seed,
+                                "cycle_phase",
+                                "e2",
+                                "graph",
+                                "rossler",
+                                N,
+                                rep,
+                            ) if vary_graph_across_reps else fixed_e2_graph_seed,
+                            stable_seed(
+                                base_seed,
+                                "cycle_phase",
+                                "e2",
+                                "data",
+                                "rossler",
+                                coupling,
+                                rep,
+                            ),
+                            stable_seed(
+                                base_seed,
+                                "cycle_phase",
+                                "e2",
+                                "seccm",
+                                "rossler",
+                                coupling,
+                                T,
+                                surr,
+                                rep,
+                            ),
+                            {"dt": 0.05},
+                            extra_seccm_kwargs,
+                        )
                     )
 
     print(f"  E2 (Rossler): {len(args_e2)} runs")
@@ -139,12 +190,50 @@ def run_cycle_phase_experiment(config, output_dir="results/cycle_phase",
 
     args_e3 = []
     for sys_name, sys_cfg in e3_systems.items():
+        fixed_graph_seed = stable_seed(
+            base_seed, "cycle_phase", "e3", "graph", sys_name, N,
+        )
         for surr in e3_surrogates:
             for rep in range(n_reps):
-                seed = base_seed + hash(("e3", sys_name, surr, rep)) % (2**31)
                 args_e3.append(
-                    (sys_name, sys_cfg["coupling"], sys_cfg["T"],
-                     surr, n_surrogates, N, seed, sys_cfg.get("sys_kwargs", {}))
+                    (
+                        sys_name,
+                        sys_cfg["coupling"],
+                        sys_cfg["T"],
+                        surr,
+                        n_surrogates,
+                        N,
+                        rep,
+                        stable_seed(
+                            base_seed,
+                            "cycle_phase",
+                            "e3",
+                            "graph",
+                            sys_name,
+                            N,
+                            rep,
+                        ) if vary_graph_across_reps else fixed_graph_seed,
+                        stable_seed(
+                            base_seed,
+                            "cycle_phase",
+                            "e3",
+                            "data",
+                            sys_name,
+                            sys_cfg["coupling"],
+                            rep,
+                        ),
+                        stable_seed(
+                            base_seed,
+                            "cycle_phase",
+                            "e3",
+                            "seccm",
+                            sys_name,
+                            surr,
+                            rep,
+                        ),
+                        sys_cfg.get("sys_kwargs", {}),
+                        extra_seccm_kwargs,
+                    )
                 )
 
     print(f"  E3 (Oscillatory): {len(args_e3)} runs")
@@ -169,12 +258,50 @@ def run_cycle_phase_experiment(config, output_dir="results/cycle_phase",
 
     args_e4 = []
     for sys_name, sys_cfg in e4_systems.items():
+        fixed_graph_seed = stable_seed(
+            base_seed, "cycle_phase", "e4", "graph", sys_name, N,
+        )
         for surr in e4_surrogates:
             for rep in range(n_reps):
-                seed = base_seed + hash(("e4", sys_name, surr, rep)) % (2**31)
                 args_e4.append(
-                    (sys_name, sys_cfg["coupling"], sys_cfg["T"],
-                     surr, n_surrogates, N, seed, sys_cfg.get("sys_kwargs", {}))
+                    (
+                        sys_name,
+                        sys_cfg["coupling"],
+                        sys_cfg["T"],
+                        surr,
+                        n_surrogates,
+                        N,
+                        rep,
+                        stable_seed(
+                            base_seed,
+                            "cycle_phase",
+                            "e4",
+                            "graph",
+                            sys_name,
+                            N,
+                            rep,
+                        ) if vary_graph_across_reps else fixed_graph_seed,
+                        stable_seed(
+                            base_seed,
+                            "cycle_phase",
+                            "e4",
+                            "data",
+                            sys_name,
+                            sys_cfg["coupling"],
+                            rep,
+                        ),
+                        stable_seed(
+                            base_seed,
+                            "cycle_phase",
+                            "e4",
+                            "seccm",
+                            sys_name,
+                            surr,
+                            rep,
+                        ),
+                        sys_cfg.get("sys_kwargs", {}),
+                        extra_seccm_kwargs,
+                    )
                 )
 
     print(f"  E4 (Chaotic safety): {len(args_e4)} runs")
@@ -226,12 +353,12 @@ def _check_e2_success(df, output_dir):
 def _plot_e2_results(df, output_dir):
     """Plot E2 Rossler comparison results."""
     # Bar chart: mean ΔAUROC per surrogate
-    agg = df.groupby("surrogate")["AUC_ROC_delta_zscore"].agg(["mean", "std"])
+    agg = df.groupby("surrogate")["AUC_ROC_delta_zscore"].agg(["mean", "sem"])
     agg = agg.sort_values("mean", ascending=False)
 
     fig, ax = plt.subplots(figsize=(10, 5))
     colors = ["#e74c3c" if "cycle_phase" in idx else "#3498db" for idx in agg.index]
-    bars = ax.bar(range(len(agg)), agg["mean"], yerr=agg["std"],
+    bars = ax.bar(range(len(agg)), agg["mean"], yerr=agg["sem"],
                   color=colors, alpha=0.8, capsize=3, edgecolor="black", linewidth=0.5)
     ax.set_xticks(range(len(agg)))
     ax.set_xticklabels(agg.index, rotation=45, ha="right")
@@ -273,7 +400,7 @@ def _plot_e2_results(df, output_dir):
 def _plot_e3_results(df, output_dir):
     """Plot E3 oscillatory generalization results."""
     agg = df.groupby(["system", "surrogate"])["AUC_ROC_delta_zscore"].agg(
-        ["mean", "std"]
+        ["mean", "sem"]
     ).reset_index()
 
     systems = sorted(df["system"].unique())
@@ -290,7 +417,7 @@ def _plot_e3_results(df, output_dir):
         means = [surr_data[surr_data["system"] == s]["mean"].values[0]
                  if len(surr_data[surr_data["system"] == s]) > 0 else 0
                  for s in systems]
-        stds = [surr_data[surr_data["system"] == s]["std"].values[0]
+        stds = [surr_data[surr_data["system"] == s]["sem"].values[0]
                 if len(surr_data[surr_data["system"] == s]) > 0 else 0
                 for s in systems]
         color = "#e74c3c" if "cycle_phase" in surr else "#3498db"
@@ -313,7 +440,7 @@ def _plot_e3_results(df, output_dir):
 def _plot_e4_results(df, output_dir):
     """Plot E4 chaotic safety check results."""
     agg = df.groupby(["system", "surrogate"])["AUC_ROC_delta_zscore"].agg(
-        ["mean", "std"]
+        ["mean", "sem"]
     ).reset_index()
 
     systems = sorted(df["system"].unique())
@@ -328,7 +455,7 @@ def _plot_e4_results(df, output_dir):
         means = [surr_data[surr_data["system"] == s]["mean"].values[0]
                  if len(surr_data[surr_data["system"] == s]) > 0 else 0
                  for s in systems]
-        stds = [surr_data[surr_data["system"] == s]["std"].values[0]
+        stds = [surr_data[surr_data["system"] == s]["sem"].values[0]
                 if len(surr_data[surr_data["system"] == s]) > 0 else 0
                 for s in systems]
         color = "#e74c3c" if "cycle_phase" in surr else "#3498db"

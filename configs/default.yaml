@@ -77,6 +77,7 @@ coupling_strength:
     - WS
     - ring
   N: 10
+  vary_graph_across_reps: false  # false = isolate coupling effect; true = include graph-to-graph variance
   coupling_values:
     logistic: [0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5]
     lorenz:   [0.3, 1.5, 3.0, 5.0, 8.0, 15.0, 22.0]
@@ -95,6 +96,7 @@ noise:
   topologies:
     - ER
   N: 10
+  vary_graph_across_reps: false  # false = isolate observation-noise effect; true = include graph-to-graph variance
   coupling:
     logistic: 0.1
     lorenz: 3.0
@@ -119,6 +121,7 @@ network_topology:
     - 10
     - 20
     - 30
+  vary_graph_across_reps: false  # false = compare topology classes, not graph-instance variance
   coupling:
     logistic: 0.1
     lorenz: 3.0
@@ -134,6 +137,7 @@ node_count:
   surrogates: [iaaft]
   N_values: [5, 10, 20, 30]
   topology: ER
+  vary_graph_across_reps: false  # false = isolate N effect; true = include graph-to-graph variance
   coupling:
     logistic: 0.1
     lorenz: 3.0
@@ -143,7 +147,7 @@ node_count:
     lorenz: 2000
     henon: 2000
   transient: 1000
-  n_surrogates: 49
+  n_surrogates: 99
   n_reps: 5
   er_p: 0.3
 

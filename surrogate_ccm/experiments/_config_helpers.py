@@ -1,5 +1,14 @@
 """Shared helpers for experiment configuration handling."""
 
+import hashlib
+
+
+def stable_seed(base_seed, *parts):
+    """Derive a reproducible 31-bit seed from experiment identifiers."""
+    payload = "::".join([str(base_seed), *(str(part) for part in parts)])
+    digest = hashlib.blake2b(payload.encode("utf-8"), digest_size=8).digest()
+    return int.from_bytes(digest[:4], "big") & 0x7FFFFFFF
+
 
 def get_system_kwargs(config, system_name):
     """Return constructor kwargs for a named dynamical system."""

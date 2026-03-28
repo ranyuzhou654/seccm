@@ -20,6 +20,7 @@ from ..surrogate.cycle_phase_surrogate import (
 )
 from ..testing.se_ccm import SECCM
 from ..utils.parallel import parallel_map
+from ._config_helpers import collect_seccm_kwargs, stable_seed
 
 
 DEFAULT_SYSTEMS = {
@@ -35,15 +36,16 @@ DEFAULT_SURROGATES   = ["iaaft", "cycle_phase_A"]
 def _worker(args):
     """Worker: one system × noise_sigma × surrogate × replicate."""
     (system_name, coupling, T, noise_sigma, surr_method,
-     n_surrogates, N, seed, sys_kwargs) = args
+     n_surrogates, N, rep, graph_seed, data_seed, noise_seed,
+     seccm_seed, sys_kwargs, extra_seccm_kwargs) = args
 
     try:
-        adj = generate_network("ER", N, seed=seed, p=0.5)
+        adj = generate_network("ER", N, seed=graph_seed, p=0.5)
         system = create_system(system_name, adj, coupling, **sys_kwargs)
-        data_clean = system.generate(T, transient=1000, seed=seed)
+        data_clean = system.generate(T, transient=1000, seed=data_seed)
 
         # Add observation noise
-        rng = np.random.default_rng(seed + 9999)
+        rng = np.random.default_rng(noise_seed)
         data_std = data_clean.std(axis=0, keepdims=True) + 1e-12
         noise = rng.normal(0, noise_sigma, size=data_clean.shape) * data_std
         data = data_clean + noise
@@ -53,7 +55,8 @@ def _worker(args):
             surrogate_method=surr_method,
             n_surrogates=n_surrogates,
             alpha=0.05, fdr=True,
-            seed=seed, verbose=False,
+            seed=seccm_seed, verbose=False,
+            **extra_seccm_kwargs,
         )
         seccm.fit(data)
         metrics = seccm.score(adj)
@@ -64,7 +67,11 @@ def _worker(args):
             "T": T,
             "noise_sigma": noise_sigma,
             "surrogate": surr_method,
-            "seed": seed,
+            "rep": rep,
+            "graph_seed": graph_seed,
+            "data_seed": data_seed,
+            "noise_seed": noise_seed,
+            "seccm_seed": seccm_seed,
             "AUC_ROC_rho":          metrics.get("AUC_ROC_rho", np.nan),
             "AUC_ROC_zscore":       metrics.get("AUC_ROC_zscore", np.nan),
             "AUC_ROC_delta_zscore": metrics.get("AUC_ROC_delta_zscore", np.nan),
@@ -106,7 +113,13 @@ def _worker(args):
     except Exception as e:
         return {
             "system": system_name, "noise_sigma": noise_sigma,
-            "surrogate": surr_method, "seed": seed, "error": str(e),
+            "surrogate": surr_method,
+            "rep": rep,
+            "graph_seed": graph_seed,
+            "data_seed": data_seed,
+            "noise_seed": noise_seed,
+            "seccm_seed": seccm_seed,
+            "error": str(e),
         }
 
 
@@ -119,10 +132,14 @@ def run_noise_robustness_experiment(config, output_dir="results/noise_robustness
     n_surrogates  = cfg.get("n_surrogates", 100)
     n_reps        = cfg.get("n_reps", 10)
     N             = cfg.get("N", 5)
-    base_seed     = cfg.get("seed", 42)
+    base_seed     = cfg.get("seed", config.get("seed", 42))
     system_cfgs   = cfg.get("systems", DEFAULT_SYSTEMS)
     noise_levels  = cfg.get("noise_levels", DEFAULT_NOISE_LEVELS)
     surrogates    = cfg.get("surrogates", DEFAULT_SURROGATES)
+    vary_graph_across_reps = cfg.get("vary_graph_across_reps", False)
+    seccm_cfg = dict(config.get("surrogate", {}))
+    seccm_cfg.update(cfg.get("seccm_kwargs", {}))
+    extra_seccm_kwargs = collect_seccm_kwargs(seccm_cfg)
 
     valid_systems = {k: v for k, v in system_cfgs.items() if k in SYSTEM_CLASSES}
 
@@ -131,15 +148,62 @@ def run_noise_robustness_experiment(config, output_dir="results/noise_robustness
         coupling   = scfg["coupling"]
         T          = scfg["T"]
         sys_kwargs = scfg.get("sys_kwargs", {})
+        fixed_graph_seed = stable_seed(
+            base_seed, "noise_robustness", "graph", sys_name, coupling, N,
+        )
         for sigma in noise_levels:
             for surr in surrogates:
                 for rep in range(n_reps):
-                    seed = base_seed + hash(
-                        ("e7", sys_name, sigma, surr, rep)
-                    ) % (2**31)
                     args_list.append(
-                        (sys_name, coupling, T, sigma, surr,
-                         n_surrogates, N, seed, sys_kwargs)
+                        (
+                            sys_name,
+                            coupling,
+                            T,
+                            sigma,
+                            surr,
+                            n_surrogates,
+                            N,
+                            rep,
+                            stable_seed(
+                                base_seed,
+                                "noise_robustness",
+                                "graph",
+                                sys_name,
+                                coupling,
+                                N,
+                                rep,
+                            ) if vary_graph_across_reps else fixed_graph_seed,
+                            stable_seed(
+                                base_seed,
+                                "noise_robustness",
+                                "data",
+                                sys_name,
+                                coupling,
+                                N,
+                                rep,
+                            ),
+                            stable_seed(
+                                base_seed,
+                                "noise_robustness",
+                                "obs_noise",
+                                sys_name,
+                                coupling,
+                                N,
+                                sigma,
+                                rep,
+                            ),
+                            stable_seed(
+                                base_seed,
+                                "noise_robustness",
+                                "seccm",
+                                sys_name,
+                                sigma,
+                                surr,
+                                rep,
+                            ),
+                            sys_kwargs,
+                            extra_seccm_kwargs,
+                        )
                     )
 
     n_total = len(args_list)
@@ -238,10 +302,10 @@ def _plot_noise(df, output_dir):
             if len(sub) == 0:
                 continue
             agg = sub.groupby("noise_sigma")["AUC_ROC_delta_zscore"].agg(
-                ["mean", "std"]
+                ["mean", "sem"]
             )
             color = surr_colors.get(surr, "#7f8c8d")
-            ax.errorbar(agg.index, agg["mean"], yerr=agg["std"],
+            ax.errorbar(agg.index, agg["mean"], yerr=agg["sem"],
                         marker="o", label=surr, color=color,
                         capsize=3, linewidth=1.5)
 
@@ -273,14 +337,14 @@ def _plot_noise(df, output_dir):
             if len(sub) == 0:
                 continue
             agg = sub.groupby("noise_sigma").agg({
-                "mean_n_cycles": ["mean", "std"],
+                "mean_n_cycles": ["mean", "sem"],
                 "fallback_frac": "mean",
             })
 
             ax.errorbar(
                 agg.index,
                 agg[("mean_n_cycles", "mean")],
-                yerr=agg[("mean_n_cycles", "std")],
+                yerr=agg[("mean_n_cycles", "sem")],
                 marker="o", color="#e74c3c", capsize=3, linewidth=1.5,
                 label="n_cycles",
             )
