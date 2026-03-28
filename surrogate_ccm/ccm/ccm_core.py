@@ -30,7 +30,6 @@ def _find_neighbors_theiler(M, k, theiler_w=0):
         Indices of k nearest neighbors.
     """
     L = len(M)
-    tree = KDTree(M)
 
     if theiler_w <= 0:
         # Fast path: use FAISS GPU kNN if available, else KDTree
@@ -38,10 +37,12 @@ def _find_neighbors_theiler(M, k, theiler_w=0):
             from ..utils.knn import knn_query
             return knn_query(M, k, use_gpu=True)
         except ImportError:
+            tree = KDTree(M)
             dists, idxs = tree.query(M, k=k + 1)
             return dists[:, 1:], idxs[:, 1:]
 
     # With Theiler window: query more neighbors, filter out temporally close
+    tree = KDTree(M)
     # Query enough extra to compensate for exclusion zone
     k_query = min(k + 2 * theiler_w + 1, L)
     dists_all, idxs_all = tree.query(M, k=k_query)
