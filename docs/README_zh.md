@@ -145,6 +145,7 @@ seccm/
 │   │   ├── exp_network_topology.py
 │   │   ├── exp_surrogate_comparison.py
 │   │   ├── exp_surrogate_robustness.py
+│   │   ├── exp_node_count.py           #   E_node: 节点数量扫描
 │   │   ├── exp_diagnostic_table.py     #   D1: 综合诊断表（8 系统 × 12 替代方法）
 │   │   ├── exp_regime_boundaries.py    #   D2: 体制边界扫描（耦合 × 系统）
 │   │   ├── exp_convergence.py          #   E5: 收敛性分析（AUROC vs T）
@@ -162,6 +163,7 @@ seccm/
 | `topology` | `--experiment topology` | 比较 ER、WS、ring 拓扑在不同网络规模下的表现 |
 | `surrogate` | `--experiment surrogate` | 比较替代方法在多个系统上的表现 |
 | `robustness` | `--experiment robustness` | 消融实验：扫描 T、耦合、观测噪声、动态噪声 |
+| `node_count` | `--experiment node_count` | E_node: 扫描节点数量 N，并记录 AUROC / 运行时间 |
 | `diagnostic_table` | `--experiment diagnostic_table` | D1: 综合诊断表（8 系统 × 12 替代方法 × 20 重复） |
 | `regime_boundaries` | `--experiment regime_boundaries` | D2: 体制边界扫描（耦合强度连续变化） |
 | `convergence` | `--experiment convergence` | E5: AUROC 收敛性分析 vs 时间序列长度 |

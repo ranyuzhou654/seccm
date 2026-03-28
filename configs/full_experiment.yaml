@@ -104,6 +104,30 @@ network_topology:
   ws_k: 4
   ws_p: 0.3
 
+# ── 实验 4b：节点数量扫描 ───────────────────────────────
+node_count:
+  systems: [logistic, lorenz, henon]
+  surrogates: [iaaft, auto]
+  N_values: [5, 10, 20, 30, 40]
+  topology: ER
+  coupling:
+    logistic: 0.1
+    lorenz: 3.0
+    henon: 0.05
+  T:
+    logistic: 2000
+    lorenz: 2000
+    henon: 2000
+  transient: 1000
+  n_surrogates: 99
+  n_reps: 10
+  er_p: 0.3
+  fdr: false
+  seccm_kwargs:
+    theiler_w: auto
+    adaptive_rho: true
+    convergence_filter: true
+
 # ── 实验 5：替代方法比较 ─────────────────────────────────
 surrogate_comparison:
   systems: [logistic, lorenz, henon, rossler, hindmarsh_rose, fitzhugh_nagumo, kuramoto]

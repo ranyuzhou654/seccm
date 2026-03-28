@@ -128,6 +128,25 @@ network_topology:
   ws_k: 4
   ws_p: 0.3
 
+# Experiment: node-count sweep
+node_count:
+  systems: [logistic, lorenz, henon]
+  surrogates: [iaaft]
+  N_values: [5, 10, 20, 30]
+  topology: ER
+  coupling:
+    logistic: 0.1
+    lorenz: 3.0
+    henon: 0.05
+  T:
+    logistic: 2000
+    lorenz: 2000
+    henon: 2000
+  transient: 1000
+  n_surrogates: 49
+  n_reps: 5
+  er_p: 0.3
+
 # Experiment: surrogate method comparison
 surrogate_comparison:
   systems: [logistic, lorenz, henon, rossler, hindmarsh_rose, fitzhugh_nagumo, kuramoto]

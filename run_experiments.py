@@ -20,6 +20,7 @@ from surrogate_ccm.experiments import (
     run_regime_boundary_experiment,
     run_convergence_experiment,
     run_noise_robustness_experiment,
+    run_node_count_experiment,
 )
 from surrogate_ccm.utils.io import load_config
 
@@ -38,6 +39,7 @@ EXPERIMENTS = {
     "regime_boundaries": run_regime_boundary_experiment,
     "convergence": run_convergence_experiment,
     "noise_robustness": run_noise_robustness_experiment,
+    "node_count": run_node_count_experiment,
 }
 
 

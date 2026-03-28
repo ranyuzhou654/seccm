@@ -60,10 +60,16 @@ python run_experiments.py --experiment robustness --config configs/adaptive_abla
 # 组 2-4：修改 seccm_kwargs 并更改 output_dir 后分别运行
 ```
 
-### 7. 完整实验（论文数据）
+### 7. 节点数量扫描
 
 ```bash
-# 运行所有 6 个实验
+python run_experiments.py --experiment node_count --config configs/default.yaml
+```
+
+### 8. 完整实验（论文数据）
+
+```bash
+# 运行所有实验
 python run_experiments.py --experiment all --config configs/full_experiment.yaml --n-jobs 16
 
 # 或只运行鲁棒性消融
@@ -81,7 +87,7 @@ python run_experiments.py --experiment robustness --config configs/xxx.yaml --n-
 # 覆盖输出目录
 python run_experiments.py --experiment robustness --config configs/xxx.yaml --output-dir results/my_test
 
-# 可选实验名：bivariate, coupling, noise, topology, surrogate, robustness, all
+# 可选实验名：bivariate, coupling, noise, topology, surrogate, robustness, node_count, all
 ```
 
 ---

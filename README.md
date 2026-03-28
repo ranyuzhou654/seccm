@@ -145,6 +145,7 @@ seccm/
 │   │   ├── exp_network_topology.py
 │   │   ├── exp_surrogate_comparison.py
 │   │   ├── exp_surrogate_robustness.py
+│   │   ├── exp_node_count.py           #   E_node: node-count sweep
 │   │   ├── exp_diagnostic_table.py     #   D1: full diagnostic table (8 systems × 12 surrogates)
 │   │   ├── exp_regime_boundaries.py    #   D2: regime boundary sweep (coupling × system)
 │   │   ├── exp_convergence.py          #   E5: convergence analysis (AUROC vs T)
@@ -164,6 +165,7 @@ seccm/
 | `topology` | `--experiment topology` | Compare ER, WS, ring topologies at varying network sizes |
 | `surrogate` | `--experiment surrogate` | Compare 10 surrogate methods across 7 systems |
 | `robustness` | `--experiment robustness` | Ablation: sweep T, coupling, obs-noise, dyn-noise |
+| `node_count` | `--experiment node_count` | E_node: Sweep node count N and track AUROC/runtime |
 | `diagnostic_table` | `--experiment diagnostic_table` | D1: Full diagnostic table (8 systems × 12 surrogates × 20 reps) |
 | `regime_boundaries` | `--experiment regime_boundaries` | D2: Regime boundary sweep across coupling strengths |
 | `convergence` | `--experiment convergence` | E5: AUROC convergence analysis vs time series length |
