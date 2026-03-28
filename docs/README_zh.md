@@ -190,7 +190,7 @@ seccm/
 | 系统 | 类型 | 状态维度 | 观测变量 | 关键参数 |
 |---|---|---|---|---|
 | Logistic | 离散映射 | 1 | x | r = 3.9 |
-| Henon | 离散映射 | 2 | x | a = 1.1, b = 0.3 |
+| Henon | 离散映射 | 2 | x | a = 1.2, b = 0.3 |
 | Lorenz | ODE（混沌） | 3 | x | sigma = 10, rho = 28, beta = 8/3 |
 | Rossler | ODE（混沌） | 3 | x | a = 0.2, b = 0.2, c = 5.7 |
 | Hindmarsh-Rose | ODE（神经元） | 3 | x（膜电位） | I_ext = 3.5, r = 0.01 |

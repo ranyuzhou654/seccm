@@ -19,7 +19,7 @@ lorenz:
   dt: 0.01
 
 henon:
-  a: 1.1            # Lower than classic 1.4 for stability under coupling
+  a: 1.2            # More broadband / less periodic than 1.1, still stable at weak coupling
   b: 0.3
 
 # CCM parameters
@@ -66,7 +66,7 @@ bivariate:
 
 # Experiment: coupling strength sweep
 # Per-system coupling values (Lorenz needs stronger coupling due to
-# diffusive x-only coupling; Hénon diverges above ~0.1 with a=1.1)
+# diffusive x-only coupling; Hénon diverges above ~0.1 with a=1.2)
 coupling_strength:
   systems:
     - logistic

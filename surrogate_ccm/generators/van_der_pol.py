@@ -94,8 +94,8 @@ class VanDerPolNetwork:
             mu_vec = np.clip(mu_vec, 0.1, None)
 
         total_steps = T + transient
-        t_span = (0, total_steps * self.dt)
-        t_eval = np.linspace(0, total_steps * self.dt, total_steps)
+        t_eval = np.arange(total_steps) * self.dt
+        t_span = (0, t_eval[-1])
 
         for attempt in range(self.max_retries):
             # Random initial conditions

@@ -192,7 +192,7 @@ The robustness experiment runs 4 sub-experiments, each sweeping one factor while
 | System | Type | State dim | Observed | Key parameters |
 |---|---|---|---|---|
 | Logistic | Discrete map | 1 | x | r = 3.9 |
-| Henon | Discrete map | 2 | x | a = 1.1, b = 0.3 |
+| Henon | Discrete map | 2 | x | a = 1.2, b = 0.3 |
 | Lorenz | ODE (chaotic) | 3 | x | sigma = 10, rho = 28, beta = 8/3 |
 | Rossler | ODE (chaotic) | 3 | x | a = 0.2, b = 0.2, c = 5.7 |
 | Hindmarsh-Rose | ODE (neural) | 3 | x (membrane) | I_ext = 3.5, r = 0.01 |

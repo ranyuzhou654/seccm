@@ -21,11 +21,14 @@ class HenonNetwork:
         Henon parameters.
     """
 
-    def __init__(self, adj, coupling, a=1.1, b=0.3):
+    def __init__(self, adj, coupling, a=1.2, b=0.3, init_scale=0.1,
+                 max_retries=10):
         self.adj = np.asarray(adj, dtype=float)
         self.coupling = coupling
         self.a = a
         self.b = b
+        self.init_scale = init_scale
+        self.max_retries = max_retries
         self.N = adj.shape[0]
 
     def generate(self, T, transient=1000, seed=None, noise_std=0.0,
@@ -54,32 +57,42 @@ class HenonNetwork:
         total = T + transient
         a, b, C = self.a, self.b, self.coupling
 
-        X = rng.uniform(-0.5, 0.5, size=self.N)
-        Y = rng.uniform(-0.5, 0.5, size=self.N)
-        data = np.empty((total, self.N))
-
         divergence_threshold = 1e10
+        k_in = self.adj.sum(axis=1)
+        k_in_safe = np.where(k_in > 0, k_in, 1.0)
 
-        for t in range(total):
-            data[t] = X
-            # Diffusive coupling: sum_j A[i,j] * (X_j - X_i)
-            k_in = self.adj.sum(axis=1)
-            k_in_safe = np.where(k_in > 0, k_in, 1.0)
-            coupled = (self.adj @ X - k_in * X) / k_in_safe
-            X_new = 1 - a * X**2 + Y + C * coupled
-            if dyn_noise_std > 0:
-                X_new += rng.normal(0, dyn_noise_std, size=self.N)
-            Y_new = b * X
+        last_error = None
+        for _ in range(self.max_retries):
+            X = rng.uniform(-self.init_scale, self.init_scale, size=self.N)
+            Y = rng.uniform(-self.init_scale, self.init_scale, size=self.N)
+            data = np.empty((total, self.N))
 
-            # Check for divergence
-            if np.any(np.abs(X_new) > divergence_threshold):
-                raise RuntimeError(
-                    f"Henon map diverged at step {t}. "
-                    f"Try reducing coupling={C} or parameter a={a}."
-                )
+            try:
+                for t in range(total):
+                    data[t] = X
+                    # Diffusive coupling: sum_j A[i,j] * (X_j - X_i)
+                    coupled = (self.adj @ X - k_in * X) / k_in_safe
+                    X_new = 1 - a * X**2 + Y + C * coupled
+                    if dyn_noise_std > 0:
+                        X_new += rng.normal(0, dyn_noise_std, size=self.N)
+                    Y_new = b * X
 
-            X = X_new
-            Y = Y_new
+                    if np.any(np.abs(X_new) > divergence_threshold):
+                        raise RuntimeError(
+                            f"Henon map diverged at step {t}. "
+                            f"Try reducing coupling={C} or parameter a={a}."
+                        )
+
+                    X = X_new
+                    Y = Y_new
+                break
+            except RuntimeError as exc:
+                last_error = exc
+        else:
+            raise RuntimeError(
+                f"Henon map diverged after {self.max_retries} retries. "
+                f"Last error: {last_error}"
+            )
 
         data = data[transient:]
 
