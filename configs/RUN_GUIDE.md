@@ -1,90 +1,201 @@
 # 实验运行指南
 
-## 配置文件一览
+## 1. 前置准备
 
-| 配置文件 | 用途 | 预计耗时 | 适用场景 |
-|---------|------|---------|---------|
-| `smoke_test.yaml` | 冒烟测试 | 2-5 分钟 | 代码修改后快速验证 |
-| `quick_validation.yaml` | 快速验证 | 15-30 分钟 | 检查各系统 AUROC 是否正常 |
-| `method_comparison.yaml` | 方法对比 | 30-60 分钟 | 找每个系统的最佳 surrogate |
-| `hr_focused.yaml` | HR 专项 | 10-20 分钟 | 验证 HR 新参数效果 |
-| `convergence_test.yaml` | 收敛过滤 | 20-40 分钟 | 测试 convergence_filter |
-| `adaptive_ablation.yaml` | 消融实验 | 30-60 分钟 | 量化 adaptive_rho/theiler_w 效果 |
-| `full_experiment.yaml` | 完整实验 | 3-8 小时 | 论文级数据收集 |
+先安装项目：
 
-> 耗时基于 `n_jobs=8` 估算，实际取决于 CPU 核心数。
+```bash
+python -m pip install -e .
+```
+
+如果你要做完整实验，建议单独指定输出目录，避免覆盖旧结果：
+
+```bash
+python run_experiments.py --experiment all \
+  --config configs/full_experiment.yaml \
+  --n-jobs 16 \
+  --output-dir results/full_20260328
+```
 
 ---
 
-## 运行命令
+## 2. 当前 CLI 支持的实验名
 
-### 1. 冒烟测试（推荐首先运行）
+`run_experiments.py` 当前注册了这些实验名：
+
+- `bivariate`
+- `coupling`
+- `noise`
+- `topology`
+- `surrogate`
+- `robustness`
+- `trivariate`
+- `sso_correlation`
+- `cycle_phase`
+- `diagnostic_table`
+- `regime_boundaries`
+- `convergence`
+- `noise_robustness`
+- `node_count`
+- `all`
+
+注意：
+
+- `all` 会按上面这 14 个实验顺序全部运行。
+- 代码仓库里虽然还有 `edge_density` 和 `subsampling` 模块，但它们目前没有接到 `run_experiments.py` 的 CLI 注册表里，所以 `--experiment all` 现在不会运行它们。
+
+---
+
+## 3. 完整实验怎么跑
+
+### 推荐命令
+
+```bash
+python run_experiments.py --experiment all \
+  --config configs/full_experiment.yaml \
+  --n-jobs 16 \
+  --output-dir results/full_20260328
+```
+
+这条命令会在：
+
+```text
+results/full_20260328/
+```
+
+下面生成子目录：
+
+```text
+bivariate/
+coupling/
+noise/
+topology/
+surrogate/
+robustness/
+trivariate/
+sso_correlation/
+cycle_phase/
+diagnostic_table/
+regime_boundaries/
+convergence/
+noise_robustness/
+node_count/
+```
+
+### 当前行为说明
+
+- `full_experiment.yaml` 里已经显式配置了 `bivariate / coupling / noise / topology / node_count / surrogate / robustness / trivariate`。
+- 对于 `sso_correlation / cycle_phase / diagnostic_table / regime_boundaries / convergence / noise_robustness`，如果 `full_experiment.yaml` 没写对应配置块，代码会自动回退到各模块内部默认参数。
+- `--output-dir` 会覆盖 YAML 里的 `output_dir`。
+- `bivariate` 不使用 `n_jobs`，其他实验会使用 `n_jobs`。
+
+---
+
+## 4. 推荐的分步跑法
+
+如果你不想一次跑完整套，建议按下面顺序：
+
+### 第一步：冒烟测试
 
 ```bash
 python run_experiments.py --experiment robustness --config configs/smoke_test.yaml
 ```
 
-### 2. 快速验证
+### 第二步：快速验证
 
 ```bash
 python run_experiments.py --experiment robustness --config configs/quick_validation.yaml
 ```
 
-### 3. 替代方法对比
+### 第三步：主实验
+
+```bash
+python run_experiments.py --experiment all \
+  --config configs/full_experiment.yaml \
+  --n-jobs 16 \
+  --output-dir results/full_main
+```
+
+### 第四步：失败后局部补跑
+
+例如只补跑诊断类实验：
+
+```bash
+python run_experiments.py --experiment diagnostic_table --config configs/full_experiment.yaml --n-jobs 16 --output-dir results/full_main
+python run_experiments.py --experiment sso_correlation --config configs/full_experiment.yaml --n-jobs 16 --output-dir results/full_main
+python run_experiments.py --experiment regime_boundaries --config configs/full_experiment.yaml --n-jobs 16 --output-dir results/full_main
+python run_experiments.py --experiment convergence --config configs/full_experiment.yaml --n-jobs 16 --output-dir results/full_main
+python run_experiments.py --experiment noise_robustness --config configs/full_experiment.yaml --n-jobs 16 --output-dir results/full_main
+python run_experiments.py --experiment cycle_phase --config configs/full_experiment.yaml --n-jobs 16 --output-dir results/full_main
+```
+
+只补跑核心 benchmark：
+
+```bash
+python run_experiments.py --experiment bivariate --config configs/full_experiment.yaml --output-dir results/full_main
+python run_experiments.py --experiment coupling --config configs/full_experiment.yaml --n-jobs 16 --output-dir results/full_main
+python run_experiments.py --experiment noise --config configs/full_experiment.yaml --n-jobs 16 --output-dir results/full_main
+python run_experiments.py --experiment topology --config configs/full_experiment.yaml --n-jobs 16 --output-dir results/full_main
+python run_experiments.py --experiment node_count --config configs/full_experiment.yaml --n-jobs 16 --output-dir results/full_main
+python run_experiments.py --experiment surrogate --config configs/full_experiment.yaml --n-jobs 16 --output-dir results/full_main
+python run_experiments.py --experiment robustness --config configs/full_experiment.yaml --n-jobs 16 --output-dir results/full_main
+python run_experiments.py --experiment trivariate --config configs/full_experiment.yaml --n-jobs 16 --output-dir results/full_main
+```
+
+---
+
+## 5. 常用实验命令
+
+### 替代方法对比
 
 ```bash
 python run_experiments.py --experiment surrogate --config configs/method_comparison.yaml
 ```
 
-### 4. HR 系统专项
+### HR 系统专项
 
 ```bash
 python run_experiments.py --experiment robustness --config configs/hr_focused.yaml
 ```
 
-### 5. 收敛过滤测试
+### 收敛过滤测试
 
 ```bash
-# 开启 convergence_filter（默认）
 python run_experiments.py --experiment robustness --config configs/convergence_test.yaml
-
-# 对比：手动将 yaml 中 convergence_filter 改为 false，output_dir 改为 results/convergence_test_off
 ```
 
-### 6. 消融实验（4 组对比）
+### 节点数量扫描
 
 ```bash
-# 组 1：全开（默认）
-python run_experiments.py --experiment robustness --config configs/adaptive_ablation.yaml
-
-# 组 2-4：修改 seccm_kwargs 并更改 output_dir 后分别运行
-```
-
-### 7. 节点数量扫描
-
-```bash
-python run_experiments.py --experiment node_count --config configs/default.yaml
-```
-
-默认 `node_count` 会在同一个 `N` 上复用同一张随机图，仅重复数据初值和 surrogate 随机性，以减少与节点数量主效应无关的方差。
-如果你想把图结构波动也纳入误差条，把 `vary_graph_across_reps` 改成 `true`。
-
-`coupling_strength`、`noise`、`network_topology` 现在也采用同样的默认策略：固定同一点上的图结构，只重复数据/ surrogate 随机性。
-另外这些 sweep 图里的阴影或误差条现在显示的是 `SEM`，不再是 `std`，因此更接近“均值估计的不确定性”。
-
-### 8. 完整实验（论文数据）
-
-```bash
-# 运行所有实验
-python run_experiments.py --experiment all --config configs/full_experiment.yaml --n-jobs 16
-
-# 或只运行鲁棒性消融
-python run_experiments.py --experiment robustness --config configs/full_experiment.yaml --n-jobs 16
+python run_experiments.py --experiment node_count --config configs/default.yaml --n-jobs 8
 ```
 
 ---
 
-## 常用选项
+## 6. 结果波动与参数建议
+
+目前代码里的 sweep 实验默认已经做了两件事来降低误差条波动：
+
+- 对 `coupling_strength`、`noise`、`network_topology`、`node_count` 等实验，默认固定同一个实验点上的图结构，只重复数据随机性和 surrogate 随机性。
+- 图上的误差条默认按 `SEM` 画，不再用 `std`。
+
+如果你想把图结构波动也算进误差条，可以在对应配置块里把：
+
+```yaml
+vary_graph_across_reps: true
+```
+
+打开。
+
+另外建议：
+
+- `n_surrogates >= 19` 才有可能在 `alpha=0.05` 下拒绝原假设。
+- 完整实验更推荐 `n_surrogates=99` 或更高，尤其是看 `z-score / delta AUROC` 时更稳定。
+- `--n-jobs` 建议先从物理核心数附近开始，不要盲目开太大。
+
+---
+
+## 7. 常用选项
 
 ```bash
 # 覆盖并行数
@@ -93,40 +204,56 @@ python run_experiments.py --experiment robustness --config configs/xxx.yaml --n-
 # 覆盖输出目录
 python run_experiments.py --experiment robustness --config configs/xxx.yaml --output-dir results/my_test
 
-# 可选实验名：bivariate, coupling, noise, topology, surrogate, robustness, node_count, all
+# 使用默认配置跑全部注册实验
+python run_experiments.py --experiment all --config configs/default.yaml
 ```
 
 ---
 
-## 输出结构
+## 8. 典型输出结构
 
-```
-results/<experiment_name>/
-├── robustness/
-│   ├── sub_a_T_sweep/          # AUROC vs T
-│   ├── sub_b_coupling_sweep/   # AUROC vs coupling
-│   ├── sub_c_obs_noise/        # AUROC vs obs noise
-│   ├── sub_d_dyn_noise/        # AUROC vs dyn noise
-│   ├── *_line_auroc.pdf        # 折线图
-│   ├── *_heatmap_delta.pdf     # 热力图
-│   ├── summary_table.csv       # 汇总表
-│   └── summary_table.tex       # LaTeX 表
+```text
+results/full_20260328/
+├── bivariate/
+├── coupling/
+├── noise/
+├── topology/
 ├── surrogate/
-│   ├── comparison_heatmap.pdf
-│   └── ...
-└── ...
+├── robustness/
+│   ├── T_sweep/
+│   ├── coupling_sweep/
+│   ├── obs_noise_sweep/
+│   ├── dyn_noise_sweep/
+│   ├── ablation_summary.csv
+│   └── experiment_parameters.csv
+├── trivariate/
+├── sso_correlation/
+├── cycle_phase/
+│   ├── E2_rossler/
+│   ├── E3_oscillatory/
+│   └── E4_chaotic/
+├── diagnostic_table/
+├── regime_boundaries/
+├── convergence/
+├── noise_robustness/
+└── node_count/
 ```
 
 ---
 
-## SECCM 关键参数说明
+## 9. SECCM 常用参数
 
-在 `seccm_kwargs` 中可设置：
+在各实验配置块的 `seccm_kwargs` 中可设置：
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
-| `adaptive_rho` | `true` | 自适应 min_rho 阈值（基于 surrogate 分布 95th percentile）|
-| `theiler_w` | `"auto"` | Theiler 窗口（`"auto"` = 中位 tau，`0` = 关闭）|
-| `convergence_filter` | `false` | 收敛性过滤（Kendall-τ 检验）|
-| `convergence_threshold` | `0.0` | 收敛分数阈值（τ > threshold 才通过）|
-| `E_method` | `"simplex"` | E 选择方法（`"simplex"`, `"fnn"`, `"cao"`）|
+| `adaptive_rho` | `true` | 自适应 `min_rho` 阈值，基于 surrogate 分布分位数 |
+| `adaptive_rho_quantile` | `0.95` | 自适应阈值使用的分位数 |
+| `theiler_w` | `"auto"` | Theiler 窗口，`"auto"` 表示用中位 `tau` |
+| `convergence_filter` | `false` 或实验自定义 | 是否做收敛性过滤 |
+| `convergence_threshold` | `0.0` | 收敛阈值 |
+| `E_method` | `"simplex"` | `E` 的选择方法，可用 `simplex/fnn/cao` |
+| `iaaft_max_iter` | `200` | iAAFT 最大迭代次数 |
+| `use_gpu` | `"auto"` | 自动检测 CuPy/GPU；没有 GPU 时自动退回 CPU |
+
+如果你要复现实验，建议把配置文件、命令行参数和输出目录一起记录下来。
